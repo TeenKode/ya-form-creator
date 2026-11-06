@@ -154,7 +154,7 @@ class EngineTests(unittest.TestCase):
         import sys
         from unittest.mock import patch
         with patch.object(sys, "frozen", True, create=True), patch.object(sys, "executable", "/Portable/YaFormCreator.exe"):
-            self.assertEqual(engine.runtime_dir(), Path("/Portable"))
+            self.assertEqual(engine.runtime_dir(), Path("/Portable/YaFormCreator.exe").resolve().parent)
 
     def test_no_bundled_questionnaire(self):
         root = Path(__file__).parent
