@@ -25,6 +25,7 @@ def validate_schema(config: dict) -> None:
 def review_config(config: dict) -> list[str]:
     """Find common mistakes; does not prove completeness or understand a brief."""
     engine.validate_config(config)
+    engine.resolve_exclusive_config(config)
     warnings = []
     if config["form"].get("publish_by_default"):
         warnings.append("form.publish_by_default: включена публикация; для подготовки ИИ используйте false.")
@@ -58,6 +59,9 @@ def review_config(config: dict) -> list[str]:
                 warnings.append(f"{slug}: идентификатор нельзя проверять как {fmt}; обычно нужен plain-текст.")
         if "initial" in question or "default" in question or "initial" in question.get("payload", {}):
             warnings.append(f"{slug}: задан начальный ответ; убедитесь, что он явно запрошен и не содержит персональных данных.")
+    import logic_analyzer
+    for issue in logic_analyzer.analyze_logic(config):
+        warnings.append("Межвопросная логика: " + str(issue.get("message", issue.get("title", issue))))
     return warnings
 
 

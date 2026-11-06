@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/TeenKode/ya-form-creator/main/schema/form.schema.json",
-  "title": "YaFormCreator configuration (1.1.0+)",
+  "title": "YaFormCreator configuration (1.2.0+)",
   "description": "AI output contract. Run engine validation for cross-field constraints, unique slugs/labels, dependencies and min/max ordering.",
   "type": "object",
   "required": [
@@ -243,6 +243,14 @@
           "type": "integer",
           "minimum": 0
         },
+        "exclusive_options": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        },
         "min": {
           "type": [
             "integer",
@@ -328,6 +336,20 @@
       },
       "additionalProperties": false,
       "allOf": [
+        {
+          "if": {
+            "required": [
+              "exclusive_options"
+            ]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "const": "checkbox"
+              }
+            }
+          }
+        },
         {
           "if": {
             "properties": {

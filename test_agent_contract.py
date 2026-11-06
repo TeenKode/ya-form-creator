@@ -167,6 +167,16 @@ class SchemaTests(unittest.TestCase):
             with self.subTest(update=update), self.assertRaises(engine.ConfigError):
                 validate_schema(config)
 
+    def test_exclusive_checkbox_and_special_field_share_contract(self):
+        from test_exclusive import make_config
+        config = make_config()
+        config["questions"][0]["exclusive_options"] = ["Не использую"]
+        config["questions"].append(field("Почта", "email", "email"))
+        validate_schema(config)
+        payloads = engine.dry_run(config)["questions"]
+        self.assertEqual(payloads[0]["widget"], "radio")
+        self.assertIn({"type": "email"}, payloads[-1]["validators"])
+
     def test_checker_cli_is_offline_and_has_distinct_statuses(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "agent.json"

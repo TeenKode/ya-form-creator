@@ -12,7 +12,7 @@ This repository is a desktop Yandex Forms builder. The user may send its URL as 
 6. If code execution is available, install `requirements-dev.txt`, save a UTF-8 file and run `python check_agent_form.py --config /path/to/form.json`, then `python create_yandex_form.py --config /path/to/form.json --dry-run`. Fix errors and resolve semantic warnings. The checks are offline (installing dependencies may need network). Never claim checks passed if they were not run.
 7. If execution is unavailable, inspect the schema, reserved codes, formats and conditions manually. Return only the JSON file/content unless the user requested explanations. Mention unavailable validation separately only when the output format allows it. Do not wrap the file content in Markdown when raw JSON was requested.
 
-Special text formats require YaFormCreator **1.1.0 or newer**. Version 1.0.0 ignores `format` and cannot guarantee these validators. Check the release used by the recipient; do not label 1.0.0 compatible.
+Special text formats require YaFormCreator **1.2.0 or newer**. Versions before 1.2.0 ignore `format` and cannot guarantee these validators. Check the release used by the recipient; do not label earlier versions compatible.
 
 ## When changing the application
 

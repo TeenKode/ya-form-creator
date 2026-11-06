@@ -12,6 +12,8 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import engine
+import logic_analyzer
+from logic_dialog import LogicReviewDialog
 from ui_theme import apply_theme, set_icon, resource_path, ScrollFrame, dialog_size, BG, INK, MUTED
 from dialogs import HelpWindow, ResultDialog, ConditionsDialog, replace_question
 
@@ -87,6 +89,7 @@ class QuestionDialog(tk.Toplevel):
         self.v_other = tk.BooleanVar(value=bool(self.original.get("other")))
         self.v_other_label = tk.StringVar(value=(self.original.get("other") or {}).get("label", "Укажите свой вариант"))
         self.v_other_option = tk.StringVar(value=(self.original.get("other") or {}).get("option", "Другое"))
+        self.exclusive_initial = engine.exclusive_options(self.original)
         self.v_min = tk.StringVar(value=str(self.original.get("min", self.original.get("min_choices", self.original.get("min_length", "")))))
         self.v_max = tk.StringVar(value=str(self.original.get("max", self.original.get("max_choices", self.original.get("max_length", "")))))
         scroller = ScrollFrame(self)
@@ -132,6 +135,12 @@ class QuestionDialog(tk.Toplevel):
         ttk.Entry(other_row, textvariable=self.v_other_option, width=15).pack(side="left", padx=4)
         ttk.Label(other_row, text="Текст доп. поля:").pack(side="left")
         ttk.Entry(other_row, textvariable=self.v_other_label, width=28).pack(side="left", padx=4, fill="x", expand=True)
+        self.exclusive_frame = ttk.LabelFrame(self.enum_frame, text="Исключающие варианты — каждый с новой строки", padding=6)
+        self.exclusive_frame.grid(row=3, column=0, sticky="ew", pady=4)
+        ttk.Label(self.exclusive_frame, text="Например, «Не использую». Выбор такого ответа исключит остальные.", wraplength=620).pack(anchor="w")
+        self.exclusive_box = tk.Text(self.exclusive_frame, height=3, wrap="word")
+        self.exclusive_box.insert("1.0", "\n".join(self.exclusive_initial))
+        self.exclusive_box.pack(fill="x", pady=(4, 0))
         r += 1
         self.matrix_frame = ttk.LabelFrame(controls, text="Строки и столбцы матрицы", padding=6)
         self.matrix_frame.grid(row=r, column=0, columnspan=2, sticky="ew", pady=7)
@@ -183,6 +192,10 @@ class QuestionDialog(tk.Toplevel):
             self.other_toggle.grid(); self.other_row.grid()
         else:
             self.other_toggle.grid_remove(); self.other_row.grid_remove()
+        if qtype == "checkbox":
+            self.exclusive_frame.grid()
+        else:
+            self.exclusive_frame.grid_remove()
         for frame in (self.enum_frame, self.matrix_frame, self.text_frame, self.bounds_frame, self.api_frame):
             frame.grid_remove()
         if qtype in engine.ENUM_TYPES:
@@ -221,6 +234,11 @@ class QuestionDialog(tk.Toplevel):
             old_opts = self.original.get("options", [])
             original_by_label = {x["label"]: x for x in old_opts if isinstance(x, dict) and "label" in x}
             result["options"] = [deepcopy(original_by_label.get(s, s)) for s in labels]
+            if qtype == "checkbox":
+                exclusive = [x.strip() for x in self.exclusive_box.get("1.0", "end-1c").splitlines() if x.strip()]
+                # Explicit [] is allowed to disable automatic label recognition.
+                if exclusive or "exclusive_options" in self.original:
+                    result["exclusive_options"] = exclusive
             if self.v_other.get() and qtype in engine.CONDITION_SOURCE_TYPES:
                 opt = self.v_other_option.get().strip() or "Другое"
                 if opt not in labels:
@@ -245,7 +263,7 @@ class QuestionDialog(tk.Toplevel):
             result["payload"]["slug"] = slug
         if qtype == self.original.get("type"):
             used = set(result)
-            excluded = {"type", "label", "slug", "options", "other", "rows", "columns", "multiline",
+            excluded = {"type", "label", "slug", "options", "other", "exclusive_options", "rows", "columns", "multiline",
                         "min", "max", "min_choices", "max_choices", "min_length", "max_length", "required", "comment", "format"}
             for key, value in self.original.items():
                 if key not in used and key not in excluded:
@@ -377,7 +395,7 @@ class CredentialsDialog(tk.Toplevel):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Яндекс Формы — универсальный конструктор")
+        self.title(f"Яндекс Формы — универсальный конструктор v{engine.APP_VERSION}")
         apply_theme(self)
         set_icon(self)
         self.user_settings = engine.load_settings()
@@ -415,6 +433,7 @@ class App(tk.Tk):
         advanced.add_command(label="Весь JSON анкеты…", command=self.edit_json)
         advanced.add_command(label="JSON выбранного вопроса…", command=self.edit_question_json)
         advanced.add_command(label="Условия показа в JSON…", command=self.edit_conditions_json)
+        advanced.add_command(label="Проверка логики между вопросами…", command=self.check_logic)
         advanced.add_separator()
         advanced.add_command(label="Удалить сохранённый токен…", command=self.forget_credentials)
         menu.add_cascade(label="Дополнительно", menu=advanced)
@@ -487,6 +506,7 @@ class App(tk.Tk):
             button = ttk.Button(ops, text=label, command=cmd, width=4 if label in ("↑", "↓") else 9)
             button.pack(side="left", padx=3); self.selection_buttons.append(button)
         ttk.Button(ops, text="Условия показа…", command=self.edit_conditions).pack(side="right")
+        ttk.Button(ops, text="Проверка логики…", command=self.check_logic).pack(side="right", padx=(0, 10))
         self.progress = ttk.Progressbar(footer, mode="indeterminate")
         self.log_view = tk.Text(footer, height=3, wrap="word", state="disabled", font=("Segoe UI", 9), background="#EBEDE6")
         self.log_view.pack(fill="x", padx=24, pady=(0, 5))
@@ -500,7 +520,8 @@ class App(tk.Tk):
                               ("<Control-o>", self.open_file),
                               ("<Control-s>", self.save),
                               ("<Control-Shift-S>", self.save_as),
-                              ("<F5>", self.preview)):
+                              ("<F5>", self.preview),
+                              ("<F6>", self.check_logic)):
             self.bind_all(keys, lambda event, callback=handler: self.shortcut(event, callback))
         self.tree.bind("<Delete>", lambda _event: (self.delete(), "break")[1])
 
@@ -512,6 +533,8 @@ class App(tk.Tk):
     def accept_candidate(self, candidate):
         try:
             engine.validate_config(candidate, allow_empty=True)
+            if candidate.get("questions"):
+                engine.resolve_exclusive_config(candidate)
         except engine.ConfigError as exc:
             messagebox.showerror("Изменение нарушает условия анкеты", str(exc), parent=self)
             return False
@@ -743,19 +766,51 @@ class App(tk.Tk):
         if dlg.result is not None:
             self.config_data = dlg.result; self.mark_dirty()
 
+    def check_logic(self):
+        try:
+            engine.validate_config(self.config_data, allow_empty=True)
+            if self.config_data["questions"]:
+                engine.resolve_exclusive_config(self.config_data)
+            dialog = LogicReviewDialog(self, self.config_data)
+        except (engine.ConfigError, ValueError) as exc:
+            messagebox.showerror("Проверка логики", str(exc), parent=self)
+            return
+        if dialog.result is not None and dialog.result != self.config_data:
+            if self.accept_candidate(dialog.result):
+                self.mark_dirty()
+                self.log("Предложенные условия показа добавлены. Сохраните анкету.")
+
     def validate(self):
         try:
             engine.validate_config(self.config_data)
             payloads, conds = engine.expand_questions(self.config_data)
-        except engine.ConfigError as exc:
-            messagebox.showerror("Ошибки в анкете", str(exc)); return False
-        messagebox.showinfo("Проверка завершена", f"Конфигурация корректна.\n"
-                           f"Блоков/вопросов: {len(payloads)}\nУсловий показа: {len(conds)}")
+            issues = logic_analyzer.analyze_logic(self.config_data)
+        except (engine.ConfigError, ValueError) as exc:
+            messagebox.showerror("Ошибки в анкете", str(exc), parent=self)
+            return False
+        if issues:
+            fixes = sum(bool(issue.get("suggestion")) for issue in issues)
+            self.log(f"Проверка: вероятных логических проблем: {len(issues)}")
+            if messagebox.askyesno(
+                "Проверка структуры и логики",
+                f"JSON корректен. Элементов после развёртки: {len(payloads)}.\n"
+                f"Условий показа: {len(conds)}.\n\n"
+                f"Возможных логических проблем: {len(issues)}.\n"
+                f"Предлагаемых исправлений: {fixes}.\n\n"
+                "Открыть проверку логики?", parent=self,
+            ):
+                self.check_logic()
+            return False
+        messagebox.showinfo("Проверка завершена",
+                            f"Конфигурация корректна.\n"
+                            f"Блоков/вопросов: {len(payloads)}\n"
+                            f"Условий показа: {len(conds)}.\n"
+                            "Вероятных межвопросных противоречий не обнаружено.", parent=self)
         return True
 
     def preview(self):
         try:
-            engine.validate_config(self.config_data)
+            engine.resolve_exclusive_config(self.config_data)
         except engine.ConfigError as exc:
             messagebox.showerror("Ошибка анкеты", str(exc), parent=self)
             return
@@ -765,9 +820,25 @@ class App(tk.Tk):
     def create(self):
         if self.busy: return
         try:
-            engine.validate_config(self.config_data)
-        except engine.ConfigError as exc:
-            messagebox.showerror("Ошибка анкеты", str(exc)); return
+            engine.resolve_exclusive_config(self.config_data)
+            issues = logic_analyzer.analyze_logic(self.config_data)
+        except (engine.ConfigError, ValueError) as exc:
+            messagebox.showerror("Ошибка анкеты", str(exc), parent=self); return
+        if issues:
+            if messagebox.askyesno(
+                "Проверка логики перед созданием",
+                f"Обнаружены возможные логические противоречия: {len(issues)}.\n"
+                "Открыть предложения по исправлению?\n\n"
+                "Для создания без изменений нажмите «Нет».", parent=self,
+            ):
+                self.check_logic()
+                return
+            if not messagebox.askyesno(
+                "Продолжить с предупреждениями?",
+                "Создать форму, несмотря на возможные противоречия?\n"
+                "Условия не будут исправлены автоматически.", parent=self,
+            ):
+                return
         if self.dirty and not self.save(): return
         remembered = engine.environment_credentials() or engine.load_credentials()
         dialog = CredentialsDialog(self, remembered)
