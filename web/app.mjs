@@ -3,7 +3,7 @@ import {parseConfigText} from './import-config.mjs';
 import {validInn} from './answer-validation.mjs';
 const SITE_VERSION='1.6.3';
 import {MIN_EXTENSION_VERSION,assessExtension} from './extension-version.mjs';
-const $=id=>document.getElementById(id),CHANNEL='yaform-bridge-v1';let connected=false,jobId=null,jobRunning=false,answers={},blocks=new Map(),effective;
+const $=id=>document.getElementById(id),CHANNEL='yaform-bridge-v1';let connected=false,jobId=null,jobRunning=false,preparing=false,answers={},blocks=new Map(),effective;
 const fresh=()=>({form:{name:'Новая анкета',allow_multiple_answers:true,need_auth:false,publish_by_default:false},questions:[]});let config=fresh();
 let extension={state:'checking',compatible:false},detection;
 let editing=null;
@@ -24,7 +24,7 @@ function bridge(type,data={},timeout=5000){return new Promise((resolve,reject)=>
   function listen(e){if(e.source!==window||e.origin!==location.origin||e.data?.channel!==CHANNEL||e.data.direction!=='response'||e.data.id!==id)return;clearTimeout(timer);window.removeEventListener('message',listen);if(e.data.ok)resolve(e.data.data);else reject(new Error(e.data.error??'Не удалось выполнить действие.'));}
   window.addEventListener('message',listen);window.postMessage({channel:CHANNEL,direction:'request',id,type,...data},location.origin);
 });}
-function detect(){if(detection)return detection;detection=probeExtension().finally(()=>detection=null);return detection;}
+function detect({fresh=false}={}){if(fresh&&detection)return detection.then(()=>detect({fresh:true}));if(detection)return detection;detection=probeExtension().finally(()=>detection=null);return detection;}
 async function probeExtension(){
   try{const reply=await bridge('ping',{},1600);extension=assessExtension(reply?.version);}catch{extension={state:'missing',compatible:false};}
   connected=extension.compatible;const outdated=['outdated','unknown'].includes(extension.state);
@@ -94,7 +94,7 @@ $('questionForm').addEventListener('submit',e=>{e.preventDefault();try{
 }catch(e){$('questionError').textContent=e.message;}});
 $('connect').addEventListener('click',async()=>{if(extension.state==='site-outdated'){location.reload();return;}if(!connected){showExtensionInstall();return;}try{await bridge('options');}catch(e){notice(e.message,true);}});$('help').addEventListener('click',()=>$('helpDialog').showModal());
 $('reloadExtensionPage').addEventListener('click',()=>location.reload());
-$('recheckExtension').addEventListener('click',async()=>{$('recheckExtension').disabled=true;$('extensionCheckStatus').textContent='Проверяем расширение…';try{const result=await detect();if(result.compatible)$('installDialog').close();else{const reload=['missing','site-outdated'].includes(result.state);$('reloadExtensionPage').hidden=!reload;$('extensionCheckStatus').textContent=reload?'Обновите страницу сайта, чтобы подключить обновлённое расширение.':'Обновление пока не обнаружено. Обновите расширение и повторите проверку.';}}finally{$('recheckExtension').disabled=false;}});
+$('recheckExtension').addEventListener('click',async()=>{$('recheckExtension').disabled=true;$('extensionCheckStatus').textContent='Проверяем расширение…';try{const result=await detect({fresh:true});if(result.compatible)$('installDialog').close();else{const reload=['missing','site-outdated'].includes(result.state);$('reloadExtensionPage').hidden=!reload;$('extensionCheckStatus').textContent=reload?'Обновите страницу сайта, чтобы подключить обновлённое расширение.':'Обновление пока не обнаружено. Обновите расширение и повторите проверку.';}}finally{$('recheckExtension').disabled=false;}});
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>$(b.dataset.close).close()));
 let aiPack;
 async function loadAi(){if(aiPack)return aiPack;const response=await fetch('ai-instructions.txt');if(!response.ok)throw new Error('Не удалось загрузить правила. Обновите страницу или скачайте TXT-файл.');aiPack=(await response.text()).replaceAll('\r\n','\n');$('aiText').value=aiPack;return aiPack;}
@@ -106,7 +106,7 @@ const aiInline=text('button','Подготовить анкету с ИИ','quie
 $('copyAi').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(await loadAi());$('aiStatus').textContent='Скопировано. Теперь вставьте в чат и добавьте своё задание.';}catch{$('aiFallback').open=true;$('aiText').focus();$('aiText').select();$('aiStatus').textContent='Нажмите Ctrl+C, чтобы скопировать выделенный текст.';}});
 $('selectAi').addEventListener('click',()=>{$('aiText').focus();$('aiText').select();});
 $('aiFallback').addEventListener('toggle',()=>{if($('aiFallback').open)loadAi().catch(e=>$('aiStatus').textContent=e.message);});
-$('send').addEventListener('click',async()=>{try{const result=await detect();if(!result.compatible){notice(result.state==='site-outdated'?'Обновите страницу сайта перед созданием формы.':'Обновите или подключите расширение перед созданием формы.',true);return;}dryRun(config);const job=await bridge('prepare',{config},15000);jobId=job.id;notice('Подтвердите создание формы в открывшейся вкладке.');}catch(e){notice(e.message,true);}});
+$('send').addEventListener('click',async()=>{if(preparing)return;preparing=true;syncSend();try{const result=await detect({fresh:true});if(!result.compatible){notice(result.state==='site-outdated'?'Обновите страницу сайта перед созданием формы.':'Обновите или подключите расширение перед созданием формы.',true);return;}dryRun(config);const job=await bridge('prepare',{config},15000);jobId=job.id;notice('Подтвердите создание формы в открывшейся вкладке.');}catch(e){notice(e.message,true);}finally{preparing=false;syncSend();}});
 setInterval(async()=>{if(!jobId)return;try{const job=await bridge('status',{jobId});jobRunning=job.status==='running';syncSend();if(job.status==='running')notice(`Создание в Яндексе: ${job.done??0} из ${job.total??'…'} элементов.`);if(['success','error','interrupted'].includes(job.status)){const box=$('jobResult');box.hidden=false;box.replaceChildren(text('h2',job.status==='success'?(job.result.published?'Форма опубликована':'Черновик создан'):'Создание остановлено'));box.append(text('p',job.error??'Откройте форму в Яндексе и проверьте её.'));if(job.result){for(const [label,key]of [['Редактировать форму','edit_url'],['Ссылка для заполнения','fill_url']]){const a=text('a',label+' ↗');a.href=job.result[key];a.target='_blank';a.rel='noreferrer';box.append(a);}}jobId=null;}}catch(e){notice(e.message,true);jobId=null;jobRunning=false;syncSend();}},1700);
 $('version').textContent=SITE_VERSION;
 try{const draft=localStorage.getItem('yaform:draft:v1');if(draft){const data=JSON.parse(draft);validateConfig(data,{allowEmpty:true});if(data.questions.length)dryRun(data);config=data;}}catch{notice('Локальная копия не восстановлена. Откройте сохранённый JSON.',true);}render();detect();setTimeout(detect,2500);window.addEventListener('focus',detect);
