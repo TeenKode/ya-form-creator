@@ -5,6 +5,14 @@ user_settings.json
 user_settings.json.tmp
 *.json
 !schema/form.schema.json
+!extension/manifest.json
+!package.json
+!package-lock.json
+node_modules/
+web-dist/
+browser-build/
+playwright-report/
+test-results/
 *.bak
 
 # Python, build artifacts and local tools
