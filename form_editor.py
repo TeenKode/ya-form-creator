@@ -84,7 +84,8 @@ class QuestionDialog(tk.Toplevel):
         self.v_type = tk.StringVar(value=LABELS[self.original.get("type", "radio")])
         self.v_slug = tk.StringVar(value=self.original.get("slug", suggested_slug))
         self.v_required = tk.BooleanVar(value=self.original.get("required", True))
-        self.v_multiline = tk.BooleanVar(value=self.original.get("multiline", True))
+        self.v_multiline = tk.BooleanVar(value=self.original.get("multiline", self.original.get("format", "plain") == "plain"))
+        self.v_format = tk.StringVar(value=engine.TEXT_FORMATS[self.original.get("format", "plain")])
         self.v_other = tk.BooleanVar(value=bool(self.original.get("other")))
         self.v_other_label = tk.StringVar(value=(self.original.get("other") or {}).get("label", "Укажите свой вариант"))
         self.v_other_option = tk.StringVar(value=(self.original.get("other") or {}).get("option", "Другое"))
@@ -155,7 +156,16 @@ class QuestionDialog(tk.Toplevel):
         r += 1
         self.text_frame = ttk.Frame(controls)
         self.text_frame.grid(row=r, column=0, columnspan=2, sticky="w", pady=6)
-        ttk.Checkbutton(self.text_frame, text="Многострочный ответ", variable=self.v_multiline).pack(anchor="w")
+        ttk.Label(self.text_frame, text="Что вводит пользователь:").pack(anchor="w")
+        format_box = ttk.Combobox(self.text_frame, values=list(engine.TEXT_FORMATS.values()),
+                                  textvariable=self.v_format, state="readonly", width=35)
+        format_box.pack(anchor="w", pady=4)
+        self.multiline_toggle = ttk.Checkbutton(self.text_frame, text="Многострочный ответ", variable=self.v_multiline)
+        self.multiline_toggle.pack(anchor="w")
+        format_box.bind("<<ComboboxSelected>>", self.update_text_format)
+        self.update_text_format()
+        ttk.Label(self.text_frame, text="Телефон РФ, почта, ссылка, ИНН и дробное число проверяются в Яндексе.\nФИО не ограничивается тремя словами. Номер документа храните как обычный текст.",
+                  style="Muted.TLabel", wraplength=640).pack(anchor="w", pady=5)
         r += 1
         self.bounds_frame = ttk.Frame(controls)
         self.bounds_frame.grid(row=r, column=0, columnspan=2, sticky="w", pady=4)
@@ -202,6 +212,12 @@ class QuestionDialog(tk.Toplevel):
     def question_type(self):
         return next(key for key, label in LABELS.items() if label == self.v_type.get())
 
+    def update_text_format(self, event=None):
+        plain = self.v_format.get() == engine.TEXT_FORMATS["plain"]
+        if not plain:
+            self.v_multiline.set(False)
+        self.multiline_toggle.configure(state="normal" if plain else "disabled")
+
     def collect(self):
         qtype = self.question_type()
         label = self.label_box.get("1.0", "end-1c").strip()
@@ -234,6 +250,9 @@ class QuestionDialog(tk.Toplevel):
             result["columns"] = [x.strip() for x in self.cols_box.get("1.0", "end-1c").splitlines() if x.strip()]
         if qtype == "text":
             result["multiline"] = self.v_multiline.get()
+            kind = next(key for key, label in engine.TEXT_FORMATS.items() if label == self.v_format.get())
+            if kind != "plain":
+                result["format"] = kind
         if qtype in {"integer", "date", "checkbox", "text"}:
             fields = {"checkbox": ("min_choices", "max_choices"), "text": ("min_length", "max_length")}.get(qtype, ("min", "max"))
             for key, raw in zip(fields, (self.v_min.get().strip(), self.v_max.get().strip())):
@@ -245,7 +264,7 @@ class QuestionDialog(tk.Toplevel):
         if qtype == self.original.get("type"):
             used = set(result)
             excluded = {"type", "label", "slug", "options", "other", "exclusive_options", "rows", "columns", "multiline",
-                        "min", "max", "min_choices", "max_choices", "min_length", "max_length", "required", "comment"}
+                        "min", "max", "min_choices", "max_choices", "min_length", "max_length", "required", "comment", "format"}
             for key, value in self.original.items():
                 if key not in used and key not in excluded:
                     result[key] = deepcopy(value)
@@ -428,7 +447,7 @@ class App(tk.Tk):
             pass
         brand = ttk.Frame(header); brand.pack(side="left")
         ttk.Label(brand, text="YaFormCreator", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(brand, text="Ваши вопросы. Понятные формы.", style="Muted.TLabel").pack(anchor="w")
+        ttk.Label(brand, text=f"Версия {engine.APP_VERSION} · Ваши вопросы. Понятные формы.", style="Muted.TLabel").pack(anchor="w")
         ttk.Button(header, text="Как начать", command=self.show_help).pack(side="right")
 
         steps = ttk.Frame(self, padding=(24, 6, 24, 14)); steps.pack(fill="x")
@@ -584,6 +603,8 @@ class App(tk.Tk):
             q = self.config_data["questions"][i]
             self.detail.insert("end", q["label"] + "\n\n", "heading")
             self.detail.insert("end", LABELS[q["type"]] + "\n", "muted")
+            if q.get("format", "plain") != "plain":
+                self.detail.insert("end", engine.TEXT_FORMATS[q["format"]] + "\n", "muted")
             self.detail.insert("end", ("Обязательный ответ" if q.get("required") else "Можно пропустить") + "\n\n")
             if q.get("comment"):
                 self.detail.insert("end", q["comment"] + "\n\n")

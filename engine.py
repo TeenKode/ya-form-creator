@@ -15,7 +15,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 API = "https://api.forms.yandex.net/v1"
 def runtime_dir() -> Path:
     """Writable directory adjacent to executable, never PyInstaller's _MEIPASS."""
@@ -84,6 +84,10 @@ def exclusive_options(question: dict) -> list[str]:
 
 
 QUESTION_TYPES = ENUM_TYPES | {"text", "matrix", "boolean", "integer", "date", "section", "comment", "api"}
+TEXT_FORMATS = {"plain": "Обычный текст", "full_name": "ФИО / имя",
+                "phone": "Телефон РФ", "email": "Электронная почта",
+                "url": "Ссылка", "inn": "ИНН", "decimal": "Дробное число"}
+API_TEXT_FORMATS = {"phone", "email", "url", "inn", "decimal"}
 
 
 class ConfigError(ValueError):
@@ -165,6 +169,14 @@ def validate_config(config: dict[str, Any], *, allow_empty: bool = False) -> Non
             raise ConfigError(f"{where}: неизвестный тип {qtype!r}.")
         if not _nonempty(item.get("label")):
             raise ConfigError(f"{where}.label: необходим текст.")
+        if "format" in item:
+            if qtype != "text" or not isinstance(item["format"], str) or item["format"] not in TEXT_FORMATS:
+                raise ConfigError(f"{where}.format: допустим только у text; выберите {', '.join(TEXT_FORMATS)}.")
+            if item["format"] != "plain" and item.get("multiline") is True:
+                raise ConfigError(f"{where}: специальный формат текста требует multiline: false.")
+        for unsupported in ("unique", "validation", "validators", "pattern", "regex"):
+            if unsupported in item:
+                raise ConfigError(f"{where}.{unsupported}: это поле не поддерживается. Для text используйте format; точные поля API задаются внутри payload типа api.")
         for flag in ("required", "hidden", "multiline", "header", "has_quiz", "show_first", "show_suggest"):
             if flag in item and type(item[flag]) is not bool:
                 raise ConfigError(f"{where}.{flag}: ожидается true или false.")
@@ -239,6 +251,8 @@ def validate_config(config: dict[str, Any], *, allow_empty: bool = False) -> Non
                     raise ConfigError(f"{where}.{field}: минимум {minimum} элементов.")
                 _unique_labels(vals, f"{where}.{field}")
         elif qtype == "text":
+            if "min" in item or "max" in item:
+                raise ConfigError(f"{where}: text использует min_length/max_length для длины. Числовые границы decimal не поддерживаются.")
             for field in ("min_length", "max_length"):
                 _validate_nonneg(item, field, where)
             if item.get("min_length", 0) > item.get("max_length", float('inf')):
@@ -339,6 +353,8 @@ def validators_for(q: dict) -> list[dict]:
     rules = [{"type": "required"}] if q.get("required", False) else []
     if q["type"] in ENUM_TYPES - {"checkbox"}:
         rules.append({"type": "single"})
+    if q["type"] == "text" and q.get("format") in API_TEXT_FORMATS:
+        rules.append({"type": q["format"]})
     mapping = {
         "checkbox": (("min_choices", "min"), ("max_choices", "max")),
         "text": (("min_length", "min"), ("max_length", "max")),
@@ -380,7 +396,7 @@ def build_question(q: dict) -> dict:
                 payload[field] = q[field]
         return payload
     if qtype == "text":
-        return {**common, "type": "string", "multiline": bool(q.get("multiline", True)),
+        return {**common, "type": "string", "multiline": bool(q.get("multiline", q.get("format", "plain") == "plain")),
                 "validators": validators_for(q)}
     if qtype == "matrix":
         return {**common, "type": "matrix",

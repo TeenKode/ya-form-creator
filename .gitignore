@@ -4,6 +4,7 @@
 user_settings.json
 user_settings.json.tmp
 *.json
+!schema/form.schema.json
 *.bak
 
 # Python, build artifacts and local tools

@@ -11,6 +11,7 @@ from tkinter import ttk, messagebox
 from typing import Any, Mapping
 
 import engine
+from field_formats import format_error
 
 
 def option_labels(item: Mapping[str, Any]) -> list[str]:
@@ -102,6 +103,9 @@ def check_answers(config: dict, answers: Mapping[str, Any]) -> list[str]:
             if q.get("required") and not raw:
                 errors.append(f"{q['label']}: ответ обязателен.")
             if raw and qtype == "text":
+                error = format_error(q.get("format", "plain"), raw)
+                if error:
+                    errors.append(f"{q['label']}: {error}")
                 if len(raw) < q.get("min_length", 0):
                     errors.append(f"{q['label']}: слишком короткий ответ.")
                 if len(raw) > q.get("max_length", float('inf')):
@@ -290,7 +294,7 @@ class PreviewWindow(tk.Toplevel):
 
     def _render_entry(self, q: dict, frame: ttk.Frame):
         slug = q["slug"]
-        if q["type"] == "text" and q.get("multiline", True):
+        if q["type"] == "text" and q.get("multiline", q.get("format", "plain") == "plain"):
             widget = tk.Text(frame, height=3, wrap="word", relief="solid", bd=1)
             widget.pack(fill="x", pady=4)
             self.answer_readers[slug] = lambda w=widget: w.get("1.0", "end-1c")
@@ -301,6 +305,11 @@ class PreviewWindow(tk.Toplevel):
         hint = " (YYYY-MM-DD)" if q["type"] == "date" else (" (целое число)" if q["type"] == "integer" else "")
         if hint:
             ttk.Label(frame, text=hint, foreground="#777777").pack(anchor="w")
+        if q.get("format", "plain") != "plain":
+            ttk.Label(frame, text=engine.TEXT_FORMATS[q["format"]] + " · предварительная проверка формата",
+                      foreground="#777777").pack(anchor="w")
+        if q.get("placeholder"):
+            ttk.Label(frame, text=q["placeholder"], foreground="#777777", wraplength=620).pack(anchor="w")
         ttk.Entry(frame, textvariable=variable).pack(fill="x", pady=4)
 
     def _render_matrix(self, q: dict, frame: ttk.Frame):
