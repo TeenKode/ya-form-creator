@@ -63,6 +63,38 @@ jobs:
           name: YaFormCreator-Windows-x64
           path: dist/YaFormCreator.exe
           if-no-files-found: error
+      - name: Publish new VERSION from main
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($version -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        shell: pwsh
+        run: |
+          gh release create "$env:TAG" dist/YaFormCreator.exe --title "$env:TAG" --generate-notes --verify-tag) { throw "Invalid VERSION: $version" }
+          $releases = gh release list --json tagName --limit 100 | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw "Cannot query GitHub Releases" }
+          if (@($releases | Where-Object { $_.tagName -eq $version }).Count -gt 0) {
+            Write-Host "Release $version already published"
+            exit 0
+          }
+          $remoteTag = git ls-remote --tags origin "refs/tags/$version"
+          if ($LASTEXITCODE -ne 0) { throw "Cannot query tags" }
+          if (-not $remoteTag) {
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git tag -a $version -m "YaFormCreator $version"
+            if ($LASTEXITCODE -ne 0) { throw "Tag creation failed" }
+            git push origin "refs/tags/$version"
+            if ($LASTEXITCODE -ne 0) { throw "Tag push failed" }
+          }
+          gh release create $version dist/YaFormCreator.exe --title "YaFormCreator $version" --notes-file RELEASE_NOTES.md --verify-tag
+          if ($LASTEXITCODE -ne 0) { throw "Release publish failed" }
       - name: Publish GitHub release for version tags
         if: startsWith(github.ref, 'refs/tags/v')
         env:
