@@ -509,6 +509,8 @@ class App(tk.Tk):
     def accept_candidate(self, candidate):
         try:
             engine.validate_config(candidate, allow_empty=True)
+            if candidate.get("questions"):
+                engine.resolve_exclusive_config(candidate)
         except engine.ConfigError as exc:
             messagebox.showerror("Изменение нарушает условия анкеты", str(exc), parent=self)
             return False
@@ -750,7 +752,7 @@ class App(tk.Tk):
 
     def preview(self):
         try:
-            engine.validate_config(self.config_data)
+            engine.resolve_exclusive_config(self.config_data)
         except engine.ConfigError as exc:
             messagebox.showerror("Ошибка анкеты", str(exc), parent=self)
             return
@@ -760,7 +762,7 @@ class App(tk.Tk):
     def create(self):
         if self.busy: return
         try:
-            engine.validate_config(self.config_data)
+            engine.resolve_exclusive_config(self.config_data)
         except engine.ConfigError as exc:
             messagebox.showerror("Ошибка анкеты", str(exc)); return
         if self.dirty and not self.save(): return
