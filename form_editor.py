@@ -12,6 +12,8 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import engine
+import logic_analyzer
+from logic_dialog import LogicReviewDialog
 from ui_theme import apply_theme, set_icon, resource_path, ScrollFrame, dialog_size, BG, INK, MUTED
 from dialogs import HelpWindow, ResultDialog, ConditionsDialog, replace_question
 
@@ -374,7 +376,7 @@ class CredentialsDialog(tk.Toplevel):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Яндекс Формы — универсальный конструктор")
+        self.title(f"Яндекс Формы — универсальный конструктор v{engine.APP_VERSION}")
         apply_theme(self)
         set_icon(self)
         self.user_settings = engine.load_settings()
@@ -412,6 +414,7 @@ class App(tk.Tk):
         advanced.add_command(label="Весь JSON анкеты…", command=self.edit_json)
         advanced.add_command(label="JSON выбранного вопроса…", command=self.edit_question_json)
         advanced.add_command(label="Условия показа в JSON…", command=self.edit_conditions_json)
+        advanced.add_command(label="Проверка логики между вопросами…", command=self.check_logic)
         advanced.add_separator()
         advanced.add_command(label="Удалить сохранённый токен…", command=self.forget_credentials)
         menu.add_cascade(label="Дополнительно", menu=advanced)
@@ -484,6 +487,7 @@ class App(tk.Tk):
             button = ttk.Button(ops, text=label, command=cmd, width=4 if label in ("↑", "↓") else 9)
             button.pack(side="left", padx=3); self.selection_buttons.append(button)
         ttk.Button(ops, text="Условия показа…", command=self.edit_conditions).pack(side="right")
+        ttk.Button(ops, text="Проверка логики…", command=self.check_logic).pack(side="right", padx=(0, 10))
         self.progress = ttk.Progressbar(footer, mode="indeterminate")
         self.log_view = tk.Text(footer, height=3, wrap="word", state="disabled", font=("Segoe UI", 9), background="#EBEDE6")
         self.log_view.pack(fill="x", padx=24, pady=(0, 5))
@@ -497,7 +501,8 @@ class App(tk.Tk):
                               ("<Control-o>", self.open_file),
                               ("<Control-s>", self.save),
                               ("<Control-Shift-S>", self.save_as),
-                              ("<F5>", self.preview)):
+                              ("<F5>", self.preview),
+                              ("<F6>", self.check_logic)):
             self.bind_all(keys, lambda event, callback=handler: self.shortcut(event, callback))
         self.tree.bind("<Delete>", lambda _event: (self.delete(), "break")[1])
 
@@ -740,14 +745,46 @@ class App(tk.Tk):
         if dlg.result is not None:
             self.config_data = dlg.result; self.mark_dirty()
 
+    def check_logic(self):
+        try:
+            engine.validate_config(self.config_data, allow_empty=True)
+            if self.config_data["questions"]:
+                engine.resolve_exclusive_config(self.config_data)
+            dialog = LogicReviewDialog(self, self.config_data)
+        except (engine.ConfigError, ValueError) as exc:
+            messagebox.showerror("Проверка логики", str(exc), parent=self)
+            return
+        if dialog.result is not None and dialog.result != self.config_data:
+            if self.accept_candidate(dialog.result):
+                self.mark_dirty()
+                self.log("Предложенные условия показа добавлены. Сохраните анкету.")
+
     def validate(self):
         try:
             engine.validate_config(self.config_data)
             payloads, conds = engine.expand_questions(self.config_data)
-        except engine.ConfigError as exc:
-            messagebox.showerror("Ошибки в анкете", str(exc)); return False
-        messagebox.showinfo("Проверка завершена", f"Конфигурация корректна.\n"
-                           f"Блоков/вопросов: {len(payloads)}\nУсловий показа: {len(conds)}")
+            issues = logic_analyzer.analyze_logic(self.config_data)
+        except (engine.ConfigError, ValueError) as exc:
+            messagebox.showerror("Ошибки в анкете", str(exc), parent=self)
+            return False
+        if issues:
+            fixes = sum(bool(issue.get("suggestion")) for issue in issues)
+            self.log(f"Проверка: вероятных логических проблем: {len(issues)}")
+            if messagebox.askyesno(
+                "Проверка структуры и логики",
+                f"JSON корректен. Элементов после развёртки: {len(payloads)}.\n"
+                f"Условий показа: {len(conds)}.\n\n"
+                f"Возможных логических проблем: {len(issues)}.\n"
+                f"Предлагаемых исправлений: {fixes}.\n\n"
+                "Открыть проверку логики?", parent=self,
+            ):
+                self.check_logic()
+            return False
+        messagebox.showinfo("Проверка завершена",
+                            f"Конфигурация корректна.\n"
+                            f"Блоков/вопросов: {len(payloads)}\n"
+                            f"Условий показа: {len(conds)}.\n"
+                            "Вероятных межвопросных противоречий не обнаружено.", parent=self)
         return True
 
     def preview(self):
@@ -763,8 +800,24 @@ class App(tk.Tk):
         if self.busy: return
         try:
             engine.resolve_exclusive_config(self.config_data)
-        except engine.ConfigError as exc:
-            messagebox.showerror("Ошибка анкеты", str(exc)); return
+            issues = logic_analyzer.analyze_logic(self.config_data)
+        except (engine.ConfigError, ValueError) as exc:
+            messagebox.showerror("Ошибка анкеты", str(exc), parent=self); return
+        if issues:
+            if messagebox.askyesno(
+                "Проверка логики перед созданием",
+                f"Обнаружены возможные логические противоречия: {len(issues)}.\n"
+                "Открыть предложения по исправлению?\n\n"
+                "Для создания без изменений нажмите «Нет».", parent=self,
+            ):
+                self.check_logic()
+                return
+            if not messagebox.askyesno(
+                "Продолжить с предупреждениями?",
+                "Создать форму, несмотря на возможные противоречия?\n"
+                "Условия не будут исправлены автоматически.", parent=self,
+            ):
+                return
         if self.dirty and not self.save(): return
         remembered = engine.environment_credentials() or engine.load_credentials()
         dialog = CredentialsDialog(self, remembered)
