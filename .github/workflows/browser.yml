@@ -34,6 +34,9 @@ jobs:
       # ubuntu-latest already includes the system libraries used by its Chrome.
       - run: npx playwright install chromium
         timeout-minutes: 5
+      - run: sudo apt-get install --yes --no-install-recommends gsettings-desktop-schemas
+        if: matrix.browser == 'opera'
+        timeout-minutes: 2
       - run: python scripts/prepare_opera_ci.py
         if: matrix.browser == 'opera'
         timeout-minutes: 5
