@@ -117,6 +117,7 @@ class LogicAnalyzerTests(unittest.TestCase):
     def test_ignore_hidden_fields_and_remain_silent_for_empty(self):
         cfg = make_form()
         cfg["questions"][1]["hidden"] = True
+        cfg["questions"][1]["required"] = False
         issues = logic.analyze_logic(cfg)
         self.assertFalse(any(i["target"] == "tools" for i in issues))
         self.assertEqual(logic.analyze_logic(
