@@ -59,7 +59,7 @@ async function dispatch(message,sender){
   }
   if(message.type==='cloud-setup-check'){
     const setup=(await chrome.storage.session.get('organizationSetup')).organizationSetup;if(!setup||Date.now()-setup.created_at>86400000)throw new Error('Откройте мастер создания организации заново.');
-    const c=await credentials();validateAuth(c);if(c.auth_scheme!=='Bearer')throw new Error('Добавьте пользовательский IAM-токен в разделе «Или вставить готовый токен», чтобы найти организацию Cloud.');
+    const c=await credentials();if(!c||c.auth_scheme!=='Bearer')throw new Error('Добавьте пользовательский IAM-токен в разделе «Или вставить готовый токен», чтобы найти организацию Cloud.');validateAuth(c);
     await chrome.storage.session.remove('organizationCandidates');const items=await listOrganizations(c,'X-Cloud-Org-Id');await cacheOrganizations(c,items);
     const comparable=Array.isArray(setup.before)&&setup.stamp===await authStamp(c);return{items,newIds:comparable?items.filter(x=>!setup.before.includes(x.id)).map(x=>x.id):[],compared:comparable};
   }

@@ -38,7 +38,7 @@ test('worker security boundary, scoped jobs, token storage, OAuth PKCE/state',as
   while(!finish)await new Promise(resolve=>setTimeout(resolve,0));await send({type:'forget'});finish(Response.json({}));assert.equal((await selecting).ok,false);assert.equal(chrome.storage.session.data.credentials,undefined);
   await send({type:'forget'});assert.equal(chrome.storage.local.data.credentials,undefined);assert.equal(chrome.storage.session.data.credentials,undefined);
   assert.equal((await send({type:'cloud-setup-start'})).ok,true);assert.equal(opened.at(-1),'https://center.yandex.cloud/');assert.equal((await send({type:'settings'})).data.setupPending,true);
-  assert.equal((await send({type:'cloud-setup-check'})).ok,false);await send({type:'cloud-setup-cancel'});assert.equal((await send({type:'settings'})).data.setupPending,false);
+  const missingToken=await send({type:'cloud-setup-check'});assert.equal(missingToken.ok,false);assert.ok(missingToken.error.includes('IAM'));await send({type:'cloud-setup-cancel'});assert.equal((await send({type:'settings'})).data.setupPending,false);
   await send({type:'save',auth_scheme:'Bearer',org_header:'X-Cloud-Org-Id',org_id:'',token:'synthetic-iam'});
   let cloudItems=[{id:'bpfold',title:'Существующая'}],reads=0;globalThis.fetch=async(url,options)=>{assert.equal(options.method,'GET');reads++;return Response.json(url.startsWith('https://organization-manager.api.cloud.yandex.net/')?{organizations:cloudItems}:{});};
   await send({type:'organizations',org_header:'X-Cloud-Org-Id'});await send({type:'cloud-setup-start'});assert.equal(reads,1);
