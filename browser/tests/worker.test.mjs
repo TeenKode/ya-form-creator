@@ -10,7 +10,7 @@ const send=(message,sender=own)=>new Promise(resolve=>listener(message,sender,re
 const config={form:{name:'Synthetic'},questions:[{type:'text',slug:'a',label:'A'}]};
 test('worker security boundary, scoped jobs, token storage, OAuth PKCE/state',async()=>{
   for(const sender of [{...site,url:'https://evil.example/'},{...site,url:'https://teenkode.github.io/other/'},{...site,frameId:1},{...site,id:'other'}, {id,url:root+'other.html'}])assert.equal((await send({type:'settings'},sender)).ok,false);
-  for(const type of ['settings','save','forget','access','oauth','create','job'])assert.equal((await send({type},site)).ok,false);
+  for(const type of ['settings','save','forget','access','oauth','create','job','organizations','select-org'])assert.equal((await send({type},site)).ok,false);
   const s=(await send({type:'settings'})).data;assert.equal(s.clientId,'a7f96f176b4241449864e48e3c3c6966');assert.equal(s.redirect,`https://${id}.chromiumapp.org/oauth`);
   assert.equal((await send({type:'save',auth_scheme:'OAuth',org_header:'X-Org-Id',org_id:'synthetic-org',token:'synthetic-token',remember:false})).ok,true);
   assert.ok(chrome.storage.session.data.credentials);assert.equal(chrome.storage.local.data.credentials,undefined);
@@ -24,7 +24,17 @@ test('worker security boundary, scoped jobs, token storage, OAuth PKCE/state',as
   assert.equal((await send({type:'oauth',clientId:s.clientId,org_id:'synthetic-org',org_header:'X-Org-Id',remember:true})).ok,true);
   assert.equal(flow.searchParams.get('code_challenge_method'),'S256');assert.equal(flow.searchParams.get('client_id'),s.clientId);assert.ok(flow.searchParams.get('state'));
   assert.equal(chrome.storage.local.data.credentials.token,'synthetic-oauth-token');
+  assert.equal(chrome.storage.local.data.credentials.org_id,'');assert.equal((await send({type:'settings'})).data.configured,false);
+  assert.ok(flow.searchParams.get('scope').includes('directory:read_organization'));
   chrome.identity.launchWebAuthFlow=async()=>`https://${id}.chromiumapp.org/oauth?code=x&state=WRONG`;
   assert.equal((await send({type:'oauth',clientId:s.clientId,org_id:'synthetic-org',org_header:'X-Org-Id'})).ok,false);
+  let checks=0;globalThis.fetch=async(url,options)=>{if(url.startsWith('https://api360.yandex.net/'))return Response.json({organizations:[{id:123,name:'Synthetic organization',email:'private@example.test'}]});checks++;assert.equal(options.headers['X-Org-Id'],'123');return Response.json({});};
+  const list=await send({type:'organizations',org_header:'X-Org-Id'});assert.equal(list.ok,true);assert.deepEqual(list.data.items,[{id:'123',name:'Synthetic organization',org_header:'X-Org-Id'}]);
+  assert.equal((await send({type:'select-org',id:'evil',org_header:'X-Org-Id'})).ok,false);assert.equal(checks,0);
+  assert.equal((await send({type:'select-org',id:'123',org_header:'X-Org-Id',remember:true})).ok,true);assert.equal(checks,1);assert.equal(chrome.storage.local.data.credentials.org_id,'123');assert.equal((await send({type:'settings'})).data.configured,true);
+  await send({type:'save',token:'replacement-token',auth_scheme:'OAuth',org_header:'X-Org-Id',org_id:'',remember:false});assert.equal((await send({type:'select-org',id:'123',org_header:'X-Org-Id'})).ok,false);
+  await send({type:'organizations',org_header:'X-Org-Id'});globalThis.fetch=async()=>new Response('secret',{status:403});assert.equal((await send({type:'select-org',id:'123',org_header:'X-Org-Id'})).ok,false);assert.equal(chrome.storage.session.data.credentials.org_id,'');
+  let finish;globalThis.fetch=()=>new Promise(resolve=>finish=resolve);const selecting=send({type:'select-org',id:'123',org_header:'X-Org-Id',remember:true});
+  while(!finish)await new Promise(resolve=>setTimeout(resolve,0));await send({type:'forget'});finish(Response.json({}));assert.equal((await selecting).ok,false);assert.equal(chrome.storage.session.data.credentials,undefined);
   await send({type:'forget'});assert.equal(chrome.storage.local.data.credentials,undefined);assert.equal(chrome.storage.session.data.credentials,undefined);
 });

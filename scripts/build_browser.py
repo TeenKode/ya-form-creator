@@ -20,7 +20,7 @@ def build():
     for source in (ROOT / 'web').iterdir():
         if source.is_file():
             shutil.copy2(source, SITE / source.name)
-    for name in ('manifest.json', 'service-worker.mjs', 'api.mjs', 'bridge.js',
+    for name in ('manifest.json', 'service-worker.mjs', 'api.mjs', 'organizations.mjs', 'bridge.js',
                  'options.html', 'options.mjs', 'review.html', 'review.mjs', 'ui.css'):
         shutil.copy2(ROOT / 'extension' / name, EXTENSION / name)
     shutil.copytree(ROOT / 'extension' / 'icons', EXTENSION / 'icons')
