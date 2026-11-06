@@ -37,7 +37,9 @@ def build():
             + '\n\n--- СПРАВОЧНИК ПОЛЕЙ ---\n\n' + guide
             + '\n\n--- JSON SCHEMA ---\n\n' + schema
             + '\n\n--- КОНЕЦ ПРАВИЛ ---\nОжидай описание анкеты от пользователя.\n')
-    (SITE / 'ai-instructions.txt').write_text(pack, encoding='utf-8', newline='\n')
+    (SITE / 'ai-reference.txt').write_text(pack, encoding='utf-8', newline='\n')
+    short = (ROOT / 'AI_SHORT_RU.md').read_text(encoding='utf-8')
+    (SITE / 'ai-instructions.txt').write_text(short, encoding='utf-8', newline='\n')
     (SITE / '.nojekyll').touch()
     with zipfile.ZipFile(SITE / 'yaform-extension.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
         for source in sorted(EXTENSION.rglob('*')):

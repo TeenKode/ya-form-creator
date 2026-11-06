@@ -1,4 +1,6 @@
-import {VERSION,TYPES,FORMATS,validateConfig,resolveExclusive,expandQuestions,dryRun,visibleSlugs,optionLabel} from './core.mjs';
+import {TYPES,FORMATS,validateConfig,resolveExclusive,expandQuestions,dryRun,visibleSlugs,optionLabel} from './core.mjs';
+import {parseConfigText} from './import-config.mjs';
+const SITE_VERSION='1.6.2';
 import {MIN_EXTENSION_VERSION,assessExtension} from './extension-version.mjs';
 const $=id=>document.getElementById(id),CHANNEL='yaform-bridge-v1';let connected=false,jobId=null,jobRunning=false,answers={},blocks=new Map(),effective;
 const fresh=()=>({form:{name:'Новая анкета',allow_multiple_answers:true,need_auth:false,publish_by_default:false},questions:[]});let config=fresh();
@@ -60,13 +62,13 @@ function checkAnswers(){const visible=visibleSlugs(effective,answers),errors=[];
       if(q.type==='integer'&&(!/^[+-]?[0-9]+$/.test(raw)||!Number.isSafeInteger(Number(raw))||Number(raw)<(q.min??-Infinity)||Number(raw)>(q.max??Infinity)))errors.push(q.label+': проверьте целое число и диапазон.');
       if(q.type==='date'&&((q.min&&raw<q.min)||(q.max&&raw>q.max)))errors.push(q.label+': дата вне диапазона.');
     }}return errors;}
-async function openFile(file){if(!file)return;if(file.size>750000){notice('Файл больше 750 КБ. Для больших анкет используйте настольное приложение.',true);return;}try{const data=JSON.parse((await file.text()).replace(/^\uFEFF/,''));setConfig(data);notice('Анкета открыта. Проверьте вопросы справа.');}catch(e){notice('Не удалось открыть файл анкеты: '+e.message,true);}}
+async function openFile(file){if(!file)return;if(file.size>750000){notice('Файл больше 750 КБ. Для больших анкет используйте настольное приложение.',true);return;}try{const data=parseConfigText(await file.text());setConfig(data);notice('Анкета открыта. Проверьте вопросы справа.');}catch(e){notice('Не удалось открыть файл анкеты: '+e.message,true);}}
 $('file').addEventListener('change',e=>{openFile(e.target.files[0]);e.target.value='';});
 for(const name of ['dragover','dragleave','drop'])$('drop').addEventListener(name,e=>{e.preventDefault();$('drop').classList.toggle('drag',name==='dragover');if(name==='drop')openFile(e.dataTransfer.files[0]);});
 $('formName').addEventListener('change',()=>{const name=$('formName').value.trim();if(!name){notice('Введите название анкеты.',true);return; }config.form.name=name;persist();render();});
 $('new').addEventListener('click',()=>{if(config.questions.length&&!confirm('Начать новую анкету? Сначала сохраните текущую, если она нужна.'))return;jobId=null;setConfig(fresh());$('jobResult').hidden=true;notice('Новая анкета готова. Добавьте вопрос или откройте файл.');});
 $('save').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(config,null,2)+'\n'],{type:'application/json;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='form.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
-$('applyJson').addEventListener('click',()=>{try{setConfig(JSON.parse($('json').value));notice('Изменения сохранены.');}catch(e){notice(e.message,true);}});
+$('applyJson').addEventListener('click',()=>{try{setConfig(parseConfigText($('json').value));notice('Изменения сохранены.');}catch(e){notice(e.message,true);}});
 $('validate').addEventListener('click',()=>{try{const plan=dryRun(config);notice(`Проверка пройдена. Сверьте содержание анкеты с вашим заданием.`);}catch(e){notice(e.message,true);}});
 $('clearAnswers').addEventListener('click',()=>{answers={};render();});$('preview').addEventListener('submit',e=>{e.preventDefault();const errors=checkAnswers();$('answerResult').textContent=errors.length?errors.join('\n'):'Ответы заполнены правильно.';});
 for(const id of ['add','emptyAdd'])$(id).addEventListener('click',()=>openQuestion());
@@ -95,5 +97,5 @@ $('selectAi').addEventListener('click',()=>{$('aiText').focus();$('aiText').sele
 $('aiFallback').addEventListener('toggle',()=>{if($('aiFallback').open)loadAi().catch(e=>$('aiStatus').textContent=e.message);});
 $('send').addEventListener('click',async()=>{try{const result=await detect();if(!result.compatible){notice(result.state==='site-outdated'?'Обновите страницу сайта перед созданием формы.':'Обновите или подключите расширение перед созданием формы.',true);return;}dryRun(config);const job=await bridge('prepare',{config},15000);jobId=job.id;notice('Подтвердите создание формы в открывшейся вкладке.');}catch(e){notice(e.message,true);}});
 setInterval(async()=>{if(!jobId)return;try{const job=await bridge('status',{jobId});jobRunning=job.status==='running';syncSend();if(job.status==='running')notice(`Создание в Яндексе: ${job.done??0} из ${job.total??'…'} элементов.`);if(['success','error','interrupted'].includes(job.status)){const box=$('jobResult');box.hidden=false;box.replaceChildren(text('h2',job.status==='success'?(job.result.published?'Форма опубликована':'Черновик создан'):'Создание остановлено'));box.append(text('p',job.error??'Откройте форму в Яндексе и проверьте её.'));if(job.result){for(const [label,key]of [['Редактировать форму','edit_url'],['Ссылка для заполнения','fill_url']]){const a=text('a',label+' ↗');a.href=job.result[key];a.target='_blank';a.rel='noreferrer';box.append(a);}}jobId=null;}}catch(e){notice(e.message,true);jobId=null;jobRunning=false;syncSend();}},1700);
-$('version').textContent=VERSION;
+$('version').textContent=SITE_VERSION;
 try{const draft=localStorage.getItem('yaform:draft:v1');if(draft){const data=JSON.parse(draft);validateConfig(data,{allowEmpty:true});config=data;}}catch{notice('Локальная копия не восстановлена. Откройте сохранённый JSON.',true);}render();detect();setTimeout(detect,2500);window.addEventListener('focus',detect);

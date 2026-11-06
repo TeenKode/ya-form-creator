@@ -109,4 +109,4 @@ pyinstaller --noconfirm --clean yaformcreator.spec
 
 Результат: `dist/YaFormCreator.exe` (one-file). [.github/workflows/build-release.yml](.github/workflows/build-release.yml) тестирует и собирает EXE на Windows в каждом PR и push `main`; EXE сохраняется в Actions → Artifacts. Версионные теги `v*` публикуют EXE в GitHub Releases. Файл `VERSION` задаёт следующую версию: при первом успешном запуске сборки новой версии из `main` GitHub Actions создаёт тег и релиз; повторные коммиты не дублируют опубликованную версию.
 
-Подготовка публикации в Opera Add-ons: [пакет и порядок отправки](docs/opera-store/SUBMIT_RU.md). Расширение ещё не опубликовано в магазине. [Конфиденциальность](https://teenkode.github.io/ya-form-creator/privacy.html).
+Подготовка публикации в Opera Add-ons: [пакет и порядок отправки](docs/opera-store/SUBMIT_RU.md). Версия 1.6.1 отправлена на модерацию Opera, публичная публикация ещё не подтверждена. [Конфиденциальность](https://teenkode.github.io/ya-form-creator/privacy.html).

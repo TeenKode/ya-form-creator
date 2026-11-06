@@ -50,7 +50,7 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
-        if: matrix.browser == 'chromium'
+        if: matrix.browser == 'opera'
         with:
           name: Opera-submission
           path: browser-build/opera-submission/

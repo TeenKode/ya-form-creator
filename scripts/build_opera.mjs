@@ -21,6 +21,7 @@ manifest.homepage_url='https://teenkode.github.io/ya-form-creator/';
 await writeFile(path.join(extension,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
 await cp(path.join(root,'docs','opera-store'),path.join(output,'listing'),{recursive:true});
 await cp(path.join(extension,'icons','icon128.png'),path.join(output,'icon128.png'));
+await cp(path.join(root,'assets','store-icon64.png'),path.join(output,'icon64.png'));
 const screenshots=path.join(output,'screenshots');await mkdir(screenshots);
 for(const name of ['store-connect.png','store-review.png','store-confirm.png']){
   try{await cp(path.join(root,'test-results',name),path.join(screenshots,name));}
