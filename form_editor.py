@@ -86,6 +86,7 @@ class QuestionDialog(tk.Toplevel):
         self.v_other = tk.BooleanVar(value=bool(self.original.get("other")))
         self.v_other_label = tk.StringVar(value=(self.original.get("other") or {}).get("label", "Укажите свой вариант"))
         self.v_other_option = tk.StringVar(value=(self.original.get("other") or {}).get("option", "Другое"))
+        self.exclusive_initial = engine.exclusive_options(self.original)
         self.v_min = tk.StringVar(value=str(self.original.get("min", self.original.get("min_choices", self.original.get("min_length", "")))))
         self.v_max = tk.StringVar(value=str(self.original.get("max", self.original.get("max_choices", self.original.get("max_length", "")))))
         scroller = ScrollFrame(self)
@@ -131,6 +132,12 @@ class QuestionDialog(tk.Toplevel):
         ttk.Entry(other_row, textvariable=self.v_other_option, width=15).pack(side="left", padx=4)
         ttk.Label(other_row, text="Текст доп. поля:").pack(side="left")
         ttk.Entry(other_row, textvariable=self.v_other_label, width=28).pack(side="left", padx=4, fill="x", expand=True)
+        self.exclusive_frame = ttk.LabelFrame(self.enum_frame, text="Исключающие варианты — каждый с новой строки", padding=6)
+        self.exclusive_frame.grid(row=3, column=0, sticky="ew", pady=4)
+        ttk.Label(self.exclusive_frame, text="Например, «Не использую». Выбор такого ответа исключит остальные.", wraplength=620).pack(anchor="w")
+        self.exclusive_box = tk.Text(self.exclusive_frame, height=3, wrap="word")
+        self.exclusive_box.insert("1.0", "\n".join(self.exclusive_initial))
+        self.exclusive_box.pack(fill="x", pady=(4, 0))
         r += 1
         self.matrix_frame = ttk.LabelFrame(controls, text="Строки и столбцы матрицы", padding=6)
         self.matrix_frame.grid(row=r, column=0, columnspan=2, sticky="ew", pady=7)
@@ -173,6 +180,10 @@ class QuestionDialog(tk.Toplevel):
             self.other_toggle.grid(); self.other_row.grid()
         else:
             self.other_toggle.grid_remove(); self.other_row.grid_remove()
+        if qtype == "checkbox":
+            self.exclusive_frame.grid()
+        else:
+            self.exclusive_frame.grid_remove()
         for frame in (self.enum_frame, self.matrix_frame, self.text_frame, self.bounds_frame, self.api_frame):
             frame.grid_remove()
         if qtype in engine.ENUM_TYPES:
@@ -205,6 +216,11 @@ class QuestionDialog(tk.Toplevel):
             old_opts = self.original.get("options", [])
             original_by_label = {x["label"]: x for x in old_opts if isinstance(x, dict) and "label" in x}
             result["options"] = [deepcopy(original_by_label.get(s, s)) for s in labels]
+            if qtype == "checkbox":
+                exclusive = [x.strip() for x in self.exclusive_box.get("1.0", "end-1c").splitlines() if x.strip()]
+                # Explicit [] is allowed to disable automatic label recognition.
+                if exclusive or "exclusive_options" in self.original:
+                    result["exclusive_options"] = exclusive
             if self.v_other.get() and qtype in engine.CONDITION_SOURCE_TYPES:
                 opt = self.v_other_option.get().strip() or "Другое"
                 if opt not in labels:
@@ -226,7 +242,7 @@ class QuestionDialog(tk.Toplevel):
             result["payload"]["slug"] = slug
         if qtype == self.original.get("type"):
             used = set(result)
-            excluded = {"type", "label", "slug", "options", "other", "rows", "columns", "multiline",
+            excluded = {"type", "label", "slug", "options", "other", "exclusive_options", "rows", "columns", "multiline",
                         "min", "max", "min_choices", "max_choices", "min_length", "max_length", "required", "comment"}
             for key, value in self.original.items():
                 if key not in used and key not in excluded:
