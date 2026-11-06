@@ -15,5 +15,6 @@ build/
 dist/
 *.exe
 .pytest_cache/
+test-temp/
 test_payload.json
 *_screenshot*.png

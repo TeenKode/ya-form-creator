@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import sys
@@ -87,24 +88,26 @@ def _validate_nonneg(item: dict, field: str, context: str) -> None:
 def _validate_date_field(item: dict, field: str, context: str) -> None:
     if field in item:
         try:
+            if not isinstance(item[field], str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", item[field]):
+                raise ValueError("Expected YYYY-MM-DD")
             date.fromisoformat(item[field])
         except (TypeError, ValueError) as exc:
             raise ConfigError(f"{context}.{field}: формат даты YYYY-MM-DD.") from exc
 
 
-def load_config(path: str | Path) -> dict[str, Any]:
+def load_config(path: str | Path, *, allow_empty: bool = False) -> dict[str, Any]:
     path = Path(path)
     try:
         config = json.loads(path.read_text(encoding="utf-8-sig"))
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         raise ConfigError(f"Не удалось открыть файл {path}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise ConfigError(f"Ошибка JSON, строка {exc.lineno}, столбец {exc.colno}: {exc.msg}") from exc
-    validate_config(config)
+    validate_config(config, allow_empty=allow_empty)
     return config
 
 
-def validate_config(config: dict[str, Any]) -> None:
+def validate_config(config: dict[str, Any], *, allow_empty: bool = False) -> None:
     if not isinstance(config, dict):
         raise ConfigError("Корень JSON должен быть объектом.")
     form = config.get("form")
@@ -114,7 +117,10 @@ def validate_config(config: dict[str, Any]) -> None:
     for flag in ("allow_multiple_answers", "need_auth", "publish_by_default"):
         if flag in form and type(form[flag]) is not bool:
             raise ConfigError(f"form.{flag}: ожидается true или false.")
-    if not isinstance(questions, list) or not questions:
+    for field in ("submit_text", "success_title", "success_subtitle"):
+        if field in form and not isinstance(form[field], str):
+            raise ConfigError(f"form.{field}: ожидается текст.")
+    if not isinstance(questions, list) or (not questions and not allow_empty):
         raise ConfigError("questions: необходим непустой список элементов.")
     slugs: set[str] = set()
     answer_options: dict[str, set[str]] = {}
@@ -126,12 +132,18 @@ def validate_config(config: dict[str, Any]) -> None:
         if not isinstance(item, dict):
             raise ConfigError(f"{where}: ожидается объект.")
         qtype = item.get("type")
-        if qtype not in QUESTION_TYPES:
+        if not isinstance(qtype, str) or qtype not in QUESTION_TYPES:
             raise ConfigError(f"{where}: неизвестный тип {qtype!r}.")
         if not _nonempty(item.get("label")):
             raise ConfigError(f"{where}.label: необходим текст.")
-        if "required" in item and type(item["required"]) is not bool:
-            raise ConfigError(f"{where}.required: ожидается true или false.")
+        for flag in ("required", "hidden", "multiline", "header", "has_quiz", "show_first", "show_suggest"):
+            if flag in item and type(item[flag]) is not bool:
+                raise ConfigError(f"{where}.{flag}: ожидается true или false.")
+        for field in ("comment", "placeholder"):
+            if field in item and not isinstance(item[field], str):
+                raise ConfigError(f"{where}.{field}: ожидается текст.")
+        if "widget" in item and item["widget"] not in ("radio", "checkbox", "dropdown", "stars", "onerow"):
+            raise ConfigError(f"{where}.widget: неизвестный вид поля.")
         if item.get("hidden") is True and item.get("required") is True:
             raise ConfigError(f"{where}: нельзя одновременно сделать вопрос скрытым и обязательным.")
         if qtype in {"section", "comment"}:
@@ -155,7 +167,7 @@ def validate_config(config: dict[str, Any]) -> None:
                     for key in ("correct", "hidden"):
                         if key in opt and type(opt[key]) is not bool:
                             raise ConfigError(f"{where}.options.{key}: ожидается true/false.")
-                    if "scores" in opt and (isinstance(opt["scores"], bool) or not isinstance(opt["scores"], (int, float))):
+                    if "scores" in opt and (isinstance(opt["scores"], bool) or not isinstance(opt["scores"], (int, float)) or not math.isfinite(opt["scores"])):
                         raise ConfigError(f"{where}.options.scores: ожидается число.")
             answer_options[slug] = set(v if isinstance(v, str) else v["label"] for v in opts)
             source_types[slug] = qtype
@@ -194,14 +206,23 @@ def validate_config(config: dict[str, Any]) -> None:
                 raise ConfigError(f"{where}.payload: укажите необработанный JSON объекта вопроса API.")
             if payload.get("slug", slug) != slug:
                 raise ConfigError(f"{where}.payload.slug должен совпадать с slug элемента.")
+            validators = payload.get("validators", [])
+            if not isinstance(validators, list) or any(not isinstance(v, dict) or not _nonempty(v.get("type")) for v in validators):
+                raise ConfigError(f"{where}.payload.validators: ожидается список объектов с type.")
         other = item.get("other")
         if other is not None:
             if qtype not in CONDITION_SOURCE_TYPES:
                 raise ConfigError(f"{where}.other допустим только для radio, checkbox, dropdown.")
             if not isinstance(other, dict):
                 raise ConfigError(f"{where}.other: ожидается объект.")
+            for flag in ("required", "multiline"):
+                if flag in other and type(other[flag]) is not bool:
+                    raise ConfigError(f"{where}.other.{flag}: ожидается true или false.")
+            for field in ("label", "placeholder"):
+                if field in other and not _nonempty(other[field]):
+                    raise ConfigError(f"{where}.other.{field}: укажите текст.")
             other_option = other.get("option", "Другое")
-            if other_option not in answer_options[slug]:
+            if not isinstance(other_option, str) or other_option not in answer_options[slug]:
                 raise ConfigError(f"{where}.other.option: вариант {other_option!r} отсутствует.")
             other_slug = other.get("slug", f"{slug}_other")
             if not _nonempty(other_slug) or not SLUG_RE.fullmatch(other_slug):
@@ -226,7 +247,7 @@ def validate_config(config: dict[str, Any]) -> None:
         if not isinstance(cond, dict):
             raise ConfigError(f"{where}: ожидается объект.")
         target, source = cond.get("target"), cond.get("source")
-        if target not in slugs or source not in slugs:
+        if not isinstance(target, str) or not isinstance(source, str) or target not in slugs or source not in slugs:
             raise ConfigError(f"{where}: несуществующий target/source: {target!r} <- {source!r}.")
         if source not in answer_options or source_types.get(source) not in CONDITION_SOURCE_TYPES:
             raise ConfigError(f"{where}: источник {source!r} должен иметь тип radio, checkbox или dropdown.")
@@ -239,25 +260,13 @@ def validate_config(config: dict[str, Any]) -> None:
         unknown = set(answers) - answer_options[source]
         if unknown:
             raise ConfigError(f"{where}.answers: варианты отсутствуют в {source}: {', '.join(sorted(unknown))}.")
-        if cond.get("operator", "and") not in {"and", "or"}:
+        if cond.get("operator", "and") not in ("and", "or"):
             raise ConfigError(f"{where}.operator: допустимы and/or.")
-        if cond.get("condition", "eq") not in {"eq", "neq"}:
+        if cond.get("condition", "eq") not in ("eq", "neq"):
             raise ConfigError(f"{where}.condition: допустимы eq/neq.")
         edges.setdefault(source, set()).add(target)
-    visited: set[str] = set()
-    working: set[str] = set()
-    def visit(node: str) -> None:
-        if node in working:
-            raise ConfigError("Условия показа образуют циклическую зависимость.")
-        if node in visited:
-            return
-        working.add(node)
-        for child in edges.get(node, set()):
-            visit(child)
-        working.remove(node)
-        visited.add(node)
-    for node in edges:
-        visit(node)
+    # Every source must precede its target, so cycles are already impossible.
+    # No recursive walk: long, valid questionnaires must not hit recursion limits.
 
 
 def enum_items(options: list[str | dict]) -> list[dict]:
@@ -266,6 +275,8 @@ def enum_items(options: list[str | dict]) -> list[dict]:
 
 def validators_for(q: dict) -> list[dict]:
     rules = [{"type": "required"}] if q.get("required", False) else []
+    if q["type"] in ENUM_TYPES - {"checkbox"}:
+        rules.append({"type": "single"})
     mapping = {
         "checkbox": (("min_choices", "min"), ("max_choices", "max")),
         "text": (("min_length", "min"), ("max_length", "max")),
@@ -368,7 +379,7 @@ def load_credentials(path: Path = CREDENTIALS_FILE) -> dict | None:
         return None
     if isinstance(obj, dict) and all(_nonempty(obj.get(k)) for k in
                                      ("auth_scheme", "org_header", "token", "org_id")):
-        if obj["auth_scheme"] in {"OAuth", "Bearer"} and obj["org_header"] in {"X-Org-Id", "X-Cloud-Org-Id"}:
+        if obj["auth_scheme"] in ("OAuth", "Bearer") and obj["org_header"] in ("X-Org-Id", "X-Cloud-Org-Id"):
             return obj
     return None
 
@@ -402,6 +413,15 @@ def environment_credentials() -> dict | None:
     }
 
 
+def _redact(text: str, headers: dict) -> str:
+    auth = headers.get("Authorization", "")
+    token = auth.partition(" ")[2]
+    for secret in (auth, token):
+        if secret:
+            text = text.replace(secret, "[токен скрыт]")
+    return text
+
+
 def _response_error(response: Any) -> str:
     try:
         body = json.dumps(response.json(), ensure_ascii=False)
@@ -421,16 +441,58 @@ def _api_call(session: Any, method: str, url: str, headers: dict, payload: Any =
             resp = session.post(url, **kw)
     except Exception as exc:
         # Requests raises RequestException and subclasses; no retry on POST (could duplicate).
-        raise ApiError(f"Сбой сети при {method} {url}: {type(exc).__name__}: {exc}") from exc
+        raise ApiError(_redact(f"Сбой сети при {method} {url}: {type(exc).__name__}: {exc}", headers)) from None
     if not resp.ok:
-        raise ApiError(f"Ошибка API {resp.status_code} при {method} {url}: {_response_error(resp)}")
+        hints = {401: "Токен недействителен или истёк. Получите новый токен.",
+                 403: "Проверьте права forms:read, forms:write и членство в организации.",
+                 429: "Превышен лимит запросов. Подождите перед новой попыткой."}
+        detail = _redact(_response_error(resp), headers)
+        raise ApiError(f"Ошибка API {resp.status_code}. {hints.get(resp.status_code, '')}\n{method} {url}: {detail}")
     try:
-        return resp.json()
+        body = resp.json()
     except ValueError:
-        return {}
+        if not getattr(resp, "text", "").strip():
+            return {}
+        raise ApiError(f"API вернул некорректный JSON при {method} {url}.") from None
+    if not isinstance(body, dict):
+        raise ApiError(f"API вернул неожиданный формат при {method} {url}.")
+    return body
+
+
+def validate_credentials(credentials: dict) -> None:
+    if credentials.get("auth_scheme") not in ("OAuth", "Bearer"):
+        raise ConfigError("Тип токена должен быть OAuth или Bearer.")
+    if credentials.get("org_header") not in ("X-Org-Id", "X-Cloud-Org-Id"):
+        raise ConfigError("Выберите организацию Яндекс 360 или Yandex Cloud.")
+    if credentials["auth_scheme"] == "Bearer" and credentials["org_header"] != "X-Cloud-Org-Id":
+        raise ConfigError("IAM-токен используется только с организацией Yandex Cloud.")
+    for field in ("token", "org_id"):
+        value = credentials.get(field)
+        if not _nonempty(value) or any(c.isspace() or ord(c) < 32 for c in value):
+            raise ConfigError("Токен и ID организации должны быть заполнены без пробелов и переносов строк.")
+        try:
+            value.encode("ascii")
+        except UnicodeError:
+            raise ConfigError("Токен и ID организации должны содержать только латинские символы.") from None
 
 
 def create_form(config: dict, credentials: dict, *, name: str | None = None,
+                publish: bool = False, progress: Callable[[str], None] | None = None,
+                session: Any = None) -> dict:
+    """Own and close our HTTP session; injected sessions remain caller-owned."""
+    if session is not None:
+        return _create_form(config, credentials, name=name, publish=publish, progress=progress, session=session)
+    validate_config(config)
+    validate_credentials(credentials)
+    try:
+        import requests
+    except ImportError as exc:
+        raise ApiError("Установите зависимости: py -3 -m pip install -r requirements.txt") from exc
+    with requests.Session() as owned_session:
+        return _create_form(config, credentials, name=name, publish=publish, progress=progress, session=owned_session)
+
+
+def _create_form(config: dict, credentials: dict, *, name: str | None = None,
                 publish: bool = False, progress: Callable[[str], None] | None = None,
                 session: Any = None) -> dict:
     """Creates a *new* form. On failure reports the draft ID if it already exists.
@@ -438,12 +500,7 @@ def create_form(config: dict, credentials: dict, *, name: str | None = None,
     API POSTs are deliberately not automatically retried to avoid duplicates.
     """
     validate_config(config)
-    if credentials.get("auth_scheme") not in {"OAuth", "Bearer"}:
-        raise ConfigError("auth_scheme должен быть OAuth или Bearer.")
-    if credentials.get("org_header") not in {"X-Org-Id", "X-Cloud-Org-Id"}:
-        raise ConfigError("org_header должен быть X-Org-Id или X-Cloud-Org-Id.")
-    if not credentials.get("token") or not credentials.get("org_id"):
-        raise ConfigError("Не заполнены токен или ID организации.")
+    validate_credentials(credentials)
     if session is None:
         try:
             import requests
@@ -456,21 +513,7 @@ def create_form(config: dict, credentials: dict, *, name: str | None = None,
         "Content-Type": "application/json", credentials["org_header"]: credentials["org_id"],
     }
     log("Проверка доступа к организации...")
-    # Other header variant may work for the same organization.
-    org_key = credentials["org_header"]
-    alternatives = [org_key, "X-Cloud-Org-Id" if org_key == "X-Org-Id" else "X-Org-Id"]
-    errors = []
-    for key in alternatives:
-        candidate = {k: v for k, v in headers.items() if k not in ("X-Org-Id", "X-Cloud-Org-Id")}
-        candidate[key] = credentials["org_id"]
-        try:
-            _api_call(session, "GET", f"{API}/surveys", candidate)
-            headers = candidate
-            break
-        except ApiError as exc:
-            errors.append(str(exc))
-    else:
-        raise ApiError("Не удалось проверить доступ к организации. " + "; ".join(errors))
+    _api_call(session, "GET", f"{API}/surveys", headers)
     payloads, conds = expand_questions(config)
     log("Создание формы...")
     survey = _api_call(session, "POST", f"{API}/surveys", headers, build_survey_body(config, name))
@@ -519,6 +562,6 @@ def create_form(config: dict, credentials: dict, *, name: str | None = None,
             log("Форма опубликована.")
         else:
             log("Форма сохранена как черновик.")
-    except (ApiError, KeyError) as exc:
+    except (ApiError, KeyError, TypeError, AttributeError) as exc:
         raise ApiError(f"Форма создана частично. Черновик: {urls['edit_url']}\nПричина: {exc}") from exc
     return urls
