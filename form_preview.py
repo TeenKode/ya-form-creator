@@ -56,7 +56,7 @@ def visible_slugs(config: dict, answers: Mapping[str, Any]) -> set[str]:
                                "operator": "and"})
     visible: set[str] = set()
     for q in config["questions"]:
-        if q.get("type") in {"section", "comment"}:
+        if q.get("type") in {"section", "comment"} or q.get("hidden"):
             continue
         slug = q["slug"]
         if is_visible(slug, conditions, answers, visible):
@@ -95,7 +95,7 @@ def check_answers(config: dict, answers: Mapping[str, Any]) -> list[str]:
             # incorrectly report it as an unanswered native text control.
             continue
         else:
-            raw = str(value or "").strip()
+            raw = "" if value is None else str(value).strip()
             if q.get("required") and not raw:
                 errors.append(f"{q['label']}: ответ обязателен.")
             if raw and qtype == "text":
@@ -174,6 +174,8 @@ class PreviewWindow(tk.Toplevel):
         self._wrapping_labels.append(form_title)
         count = 0
         for q in config["questions"]:
+            if q.get("hidden"):
+                continue
             if q["type"] in {"section", "comment"}:
                 label = ttk.Label(self.content, text=q["label"],
                                   font=("Segoe UI", 12, "bold" if q["type"] == "section" else "normal"),
