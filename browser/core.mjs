@@ -1,5 +1,5 @@
 // Shared, dependency-free contract for the website and the extension.
-export const VERSION = '1.5.0';
+export const VERSION = '1.5.1';
 export const TYPES = {radio:'Один вариант',checkbox:'Несколько вариантов',dropdown:'Выпадающий список',scale:'Шкала',stars:'Звёзды',onerow:'В одну строку',text:'Текст',matrix:'Матрица',boolean:'Да / нет',integer:'Целое число',date:'Дата',section:'Раздел',comment:'Текстовый блок',api:'Расширенный API'};
 export const FORMATS = {plain:'Обычный текст',full_name:'ФИО / имя',phone:'Телефон РФ',email:'Электронная почта',url:'Ссылка',inn:'ИНН',decimal:'Дробное число'};
 const ENUM = ['radio','checkbox','dropdown','scale','stars','onerow'];

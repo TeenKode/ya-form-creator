@@ -15,7 +15,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.5.1"
 API = "https://api.forms.yandex.net/v1"
 def runtime_dir() -> Path:
     """Writable directory adjacent to executable, never PyInstaller's _MEIPASS."""
