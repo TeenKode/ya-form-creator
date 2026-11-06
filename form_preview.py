@@ -85,6 +85,9 @@ def check_answers(config: dict, answers: Mapping[str, Any]) -> list[str]:
                 errors.append(f"{q['label']}: выберите не менее {q['min_choices']} вариантов.")
             if len(value) > q.get("max_choices", float('inf')):
                 errors.append(f"{q['label']}: выберите не более {q['max_choices']} вариантов.")
+            exclusions = set(engine.exclusive_options(q))
+            if exclusions.intersection(value) and len(set(value)) > 1:
+                errors.append(f"{q['label']}: исключающий ответ нельзя выбирать вместе с другими.")
         elif qtype == "matrix":
             if q.get("required") and (not isinstance(value, dict) or
                     any(not value.get(row if isinstance(row, str) else row["label"])
@@ -132,7 +135,7 @@ def check_answers(config: dict, answers: Mapping[str, Any]) -> list[str]:
 class PreviewWindow(tk.Toplevel):
     """Scroll-friendly native-widget preview with live conditional visibility."""
     def __init__(self, parent: tk.Misc, config: dict):
-        engine.validate_config(config)
+        config = engine.resolve_exclusive_config(config)
         super().__init__(parent)
         self.title("Предпросмотр формы — локально, без отправки")
         self.geometry("880x720")
