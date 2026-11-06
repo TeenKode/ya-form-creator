@@ -138,5 +138,54 @@ class ExclusivityTests(unittest.TestCase):
         self.assertEqual(response["conditions_count"], 3)
 
 
+class ExclusiveGuiTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import tkinter as tk
+        try:
+            cls.root = tk.Tk()
+            cls.root.withdraw()
+        except tk.TclError as exc:
+            raise unittest.SkipTest(f"No display: {exc}")
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "root"):
+            cls.root.destroy()
+
+    @staticmethod
+    def descendants(widget):
+        values = []
+        for child in widget.winfo_children():
+            values.append(child)
+            values.extend(ExclusiveGuiTests.descendants(child))
+        return values
+
+    def test_exclusive_gate_replaces_conflicting_checkboxes(self):
+        from tkinter import ttk
+        window = form_preview.PreviewWindow(self.root, make_config())
+        self.root.update()
+        gate_radios = [w for w in self.descendants(window.blocks["tools_choice"])
+                       if isinstance(w, ttk.Radiobutton)]
+        choices = [w for w in self.descendants(window.blocks["tools"])
+                   if isinstance(w, ttk.Checkbutton)]
+        self.assertEqual(len(gate_radios), 2)
+        self.assertEqual(len(choices), 3)
+        self.assertFalse(any(w.cget("text") == "Не использую" for w in choices))
+        self.assertFalse(window.blocks["tools"].winfo_ismapped())
+        gate_radios[0].invoke()
+        self.root.update()
+        self.assertTrue(window.blocks["tools"].winfo_ismapped())
+        choices[0].invoke()
+        choices[1].invoke()
+        self.assertEqual(set(window.collect_answers()["tools"]), {"Первый", "Второй"})
+        gate_radios[1].invoke()
+        self.root.update()
+        self.assertFalse(window.blocks["tools"].winfo_ismapped())
+        self.assertEqual(window.collect_answers()["tools_choice"], "Не использую")
+        self.assertNotIn("tools", form_preview.visible_slugs(window.config_data, window.collect_answers()))
+        window.destroy()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
