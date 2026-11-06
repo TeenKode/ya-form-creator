@@ -563,6 +563,26 @@
               }
             }
           }
+        },
+        {
+          "not": {
+            "required": [
+              "type",
+              "required",
+              "max_choices"
+            ],
+            "properties": {
+              "type": {
+                "const": "checkbox"
+              },
+              "required": {
+                "const": true
+              },
+              "max_choices": {
+                "const": 0
+              }
+            }
+          }
         }
       ]
     }

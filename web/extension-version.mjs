@@ -1,6 +1,6 @@
 // Update this minimum when a site feature requires a newer extension.
 // Site-only patch releases need not force a compatible extension update.
-export const MIN_EXTENSION_VERSION='1.6.0';
+export const MIN_EXTENSION_VERSION='1.6.2';
 export const SUPPORTED_EXTENSION_MAJOR=1;
 
 function parseVersion(value){

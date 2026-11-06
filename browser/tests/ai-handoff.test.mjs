@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {parseConfigText} from '../../web/import-config.mjs';
 import {dryRun} from '../core.mjs';
-const short=readFileSync('AI_SHORT_RU.md','utf8');
+const short=readFileSync('AI_SHORT_RU.md','utf8').replaceAll('\r\n','\n');
 test('short standalone handoff stays bounded and its only JSON example passes the engine',()=>{
   assert.ok(short.length<4200);
   const example=JSON.parse(short.match(/```json\n([\s\S]*?)\n```/)[1]);
   assert.equal(dryRun(example).questions.length,2);
   assert.equal(example.form.publish_by_default,false);
   for(const name of ['full_name','phone','email','url','inn','decimal'])assert.ok(short.includes(name));
-  assert.ok(!short.includes('JSON Schema'));assert.ok(!short.includes('pip install'));
+  assert.ok(short.includes('JSON текстом'));assert.ok(short.includes('min_choices'));assert.ok(short.includes('max_choices'));assert.ok(!short.includes('JSON Schema'));assert.ok(!short.includes('pip install'));
 });
 test('imports plain JSON, a BOM, and one fenced chat reply without changing form content',()=>{
   const c={form:{name:'Synthetic'},questions:[{type:'text',slug:'id',label:'Номер заказа',multiline:false}]};const raw=JSON.stringify(c);

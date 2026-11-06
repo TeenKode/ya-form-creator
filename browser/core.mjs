@@ -1,5 +1,5 @@
 // Shared, dependency-free contract for the website and the extension.
-export const VERSION = '1.6.1';
+export const VERSION = '1.6.2';
 export const TYPES = {radio:'Один вариант',checkbox:'Несколько вариантов',dropdown:'Выпадающий список',scale:'Шкала',stars:'Звёзды',onerow:'В одну строку',text:'Текст',matrix:'Матрица',boolean:'Да / нет',integer:'Целое число',date:'Дата',section:'Раздел',comment:'Текстовый блок',api:'Расширенный API'};
 export const FORMATS = {plain:'Обычный текст',full_name:'ФИО / имя',phone:'Телефон РФ',email:'Электронная почта',url:'Ссылка',inn:'ИНН',decimal:'Дробное число'};
 const ENUM = ['radio','checkbox','dropdown','scale','stars','onerow'];
@@ -62,6 +62,7 @@ export function validateConfig(config, {allowEmpty=false}={}) {
       if(q.type==='checkbox') {
         if('exclusive_options' in q && (!Array.isArray(q.exclusive_options)||q.exclusive_options.some(s=>!nonempty(s)||!values.includes(s))||new Set(q.exclusive_options).size!==q.exclusive_options.length)) fail(`${where}: неверные исключающие ответы.`);
         const exclusions=exclusiveOptions(q), remaining=values.length-exclusions.length;
+        if(q.required&&q.max_choices===0)fail(`${where}: обязательный вопрос должен допускать хотя бы один ответ.`);
         bounds(q,['min_choices','max_choices'],where);
         if(q.min_choices>values.length||q.max_choices>values.length) fail(`${where}: ограничение выбора больше числа вариантов.`);
         if(exclusions.length && (remaining<2||q.hidden||q.has_quiz||q.options.some(o=>obj(o)&&('correct'in o||'scores'in o))||q.max_choices>remaining)) fail(`${where}: исключающие ответы несовместимы с настройками; нужны минимум два обычных варианта.`);

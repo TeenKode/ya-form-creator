@@ -4,10 +4,10 @@ import {assessExtension,MIN_EXTENSION_VERSION} from '../../web/extension-version
 
 test('compatible versions use numeric components and accept the minimum',()=>{
   assert.equal(assessExtension(MIN_EXTENSION_VERSION).compatible,true);
-  for(const version of ['1.6','1.6.0.1','1.6.1','1.6.10','1.10.0','1.65535.0'])assert.equal(assessExtension(version).state,'ready',version);
+  for(const version of ['1.6.2','1.6.2.1','1.6.10','1.10.0','1.65535.0'])assert.equal(assessExtension(version).state,'ready',version);
 });
 test('old versions are blocked',()=>{
-  for(const version of ['0.9.0','1','1.3.0','1.4.99','1.4.999.999','1.5.1','1.5.65535'])assert.equal(assessExtension(version).state,'outdated',version);
+  for(const version of ['0.9.0','1','1.3.0','1.4.99','1.4.999.999','1.5.1','1.5.65535','1.6.0','1.6.1'])assert.equal(assessExtension(version).state,'outdated',version);
 });
 test('future major versions require a newer site rather than a downgrade',()=>assert.deepEqual(assessExtension('2.0.0'),{state:'site-outdated',compatible:false,version:'2.0.0'}));
 test('missing or malformed versions fail closed',()=>{
