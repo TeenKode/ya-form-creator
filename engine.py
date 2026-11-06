@@ -172,6 +172,8 @@ def validate_config(config: dict[str, Any], *, allow_empty: bool = False) -> Non
                 raise ConfigError(f"{where}.{field}: ожидается текст.")
         if "widget" in item and item["widget"] not in ("radio", "checkbox", "dropdown", "stars", "onerow"):
             raise ConfigError(f"{where}.widget: неизвестный вид поля.")
+        if qtype != "checkbox" and "exclusive_options" in item:
+            raise ConfigError(f"{where}.exclusive_options доступен только для checkbox.")
         if item.get("hidden") is True and item.get("required") is True:
             raise ConfigError(f"{where}: нельзя одновременно сделать вопрос скрытым и обязательным.")
         if qtype in {"section", "comment"}:
@@ -411,6 +413,8 @@ def resolve_exclusive_config(config: dict) -> dict:
             questions.append(q)
             continue
         gate_slug = q["slug"] + "_choice"
+        if EXCLUSIVE_GATE_LABEL in [ _option_label(opt) for opt in q["options"] ]:
+            raise ConfigError(f"questions: нельзя использовать служебный вариант {EXCLUSIVE_GATE_LABEL!r} как собственный ответ.")
         info[q["slug"]] = (gate_slug, set(exclusions))
         gate = {"type": "radio", "slug": gate_slug, "label": q["label"],
                 "options": [EXCLUSIVE_GATE_LABEL, *exclusions],
