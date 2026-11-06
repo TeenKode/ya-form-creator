@@ -40,9 +40,9 @@ test('extension version gate blocks old and unknown versions and rechecks before
   try{
     await context.route(SITE+'**',async route=>{const name=new URL(route.request().url()).pathname.slice('/ya-form-creator/'.length)||'index.html';const types={html:'text/html',css:'text/css',mjs:'application/javascript',png:'image/png'};await route.fulfill({body:await readFile(path.join('web-dist',name)),contentType:types[name.split('.').at(-1)]??'application/octet-stream'});});
     const page=await context.newPage();await page.addInitScript(()=>{
-      globalThis.__extensionVersion='1.4.0';globalThis.__prepareRequests=0;
+      globalThis.__extensionVersion='1.4.0';globalThis.__replyPing=true;globalThis.__prepareRequests=0;
       window.addEventListener('message',event=>{const m=event.data;if(m?.channel!=='yaform-bridge-v1'||m.direction!=='request')return;
-        if(m.type==='ping')window.postMessage({channel:m.channel,direction:'response',id:m.id,ok:true,data:{version:globalThis.__extensionVersion}},location.origin);
+        if(m.type==='ping'&&globalThis.__replyPing)window.postMessage({channel:m.channel,direction:'response',id:m.id,ok:true,data:{version:globalThis.__extensionVersion}},location.origin);
         if(m.type==='prepare')globalThis.__prepareRequests++;
       });
     });
@@ -50,7 +50,8 @@ test('extension version gate blocks old and unknown versions and rechecks before
     await page.locator('#emptyAdd').click();await page.locator('#qLabel').fill('Тестовый вопрос');await page.locator('#questionForm button[type=submit]').click();await expect(page.locator('#questionCount')).toHaveText('1');await expect(page.locator('#send')).toBeDisabled();
     await page.evaluate(()=>document.getElementById('send').dispatchEvent(new MouseEvent('click')));await expect(page.locator('#notice')).toContainText('Обновите');expect(await page.evaluate(()=>globalThis.__prepareRequests)).toBe(0);
     await page.locator('#connect').click();await expect(page.locator('#installTitle')).toHaveText('Обновите расширение');await expect(page.locator('#updateSteps')).toBeVisible();await expect(page.locator('#installSteps')).toBeHidden();await page.screenshot({path:'test-results/extension-update.png'});
-    await page.evaluate(()=>globalThis.__extensionVersion='1.5.0');await page.locator('#recheckExtension').click();await expect(page.locator('#installDialog')).toBeHidden();await expect(page.locator('#extensionState')).toHaveText('Расширение подключено');await expect(page.locator('#send')).toBeEnabled();
+    await page.evaluate(()=>globalThis.__replyPing=false);await page.locator('#recheckExtension').click();await expect(page.locator('#reloadExtensionPage')).toBeVisible();await expect(page.locator('#extensionCheckStatus')).toContainText('Обновите страницу');
+    await page.evaluate(()=>{globalThis.__replyPing=true;globalThis.__extensionVersion='1.5.0';});await page.locator('#recheckExtension').click();await expect(page.locator('#installDialog')).toBeHidden();await expect(page.locator('#extensionState')).toHaveText('Расширение подключено');await expect(page.locator('#send')).toBeEnabled();
     await page.evaluate(()=>globalThis.__extensionVersion='1.3.0');await page.locator('#send').click();await expect(page.locator('#send')).toBeDisabled();await expect(page.locator('#extensionState')).toHaveText('Обновите расширение');expect(await page.evaluate(()=>globalThis.__prepareRequests)).toBe(0);
     await page.evaluate(()=>{globalThis.__extensionVersion=undefined;window.dispatchEvent(new Event('focus'));});await expect(page.locator('#extensionNote')).toContainText('Не удалось определить');await expect(page.locator('#send')).toBeDisabled();
     await page.evaluate(()=>{globalThis.__extensionVersion='2.0.0';window.dispatchEvent(new Event('focus'));});await expect(page.locator('#extensionState')).toHaveText('Обновите страницу сайта');await expect(page.locator('#connect')).toHaveText('Обновить страницу →');await expect(page.locator('#send')).toBeDisabled();
