@@ -343,6 +343,7 @@ class App(tk.Tk):
         self.busy = False
         self.messages = queue.Queue()
         self._build()
+        self._bind_shortcuts()
         last_form = Path(self.user_settings.get("last_form_path", "")) if self.user_settings.get("last_form_path") else None
         if last_form and last_form.is_file():
             self.open_path(last_form)
@@ -397,6 +398,16 @@ class App(tk.Tk):
         self.log_view.pack(fill="x", padx=12, pady=(0, 3))
         self.status = tk.StringVar(value="Готово")
         ttk.Label(self, textvariable=self.status, relief="sunken", padding=(10, 4)).pack(fill="x", side="bottom")
+
+    def _bind_shortcuts(self):
+        """Shortcuts work regardless of keyboard focus; deletion remains tree-only."""
+        for keys, handler in (("<Control-n>", self.new),
+                              ("<Control-o>", self.open_file),
+                              ("<Control-s>", self.save),
+                              ("<Control-Shift-S>", self.save_as),
+                              ("<F5>", self.preview)):
+            self.bind_all(keys, lambda _event, callback=handler: (callback(), "break")[1])
+        self.tree.bind("<Delete>", lambda _event: (self.delete(), "break")[1])
 
     def log(self, text: str):
         self.log_view.configure(state="normal")
@@ -574,21 +585,13 @@ class App(tk.Tk):
         return True
 
     def preview(self):
-        win = tk.Toplevel(self); win.title("Предпросмотр структуры анкеты")
-        win.geometry("780x610")
-        view = tk.Text(win, wrap="word", font=("Segoe UI", 11))
-        view.pack(fill="both", expand=True, padx=15, pady=15)
-        view.insert("end", self.config_data["form"]["name"] + "\n\n")
-        for i, item in enumerate(self.config_data["questions"], 1):
-            if item["type"] in {"section", "comment"}:
-                view.insert("end", f"{item['label']}\n{item.get('comment', '')}\n\n")
-                continue
-            view.insert("end", f"{i}. {item['label']} {'*' if item.get('required') else ''}\n")
-            for v in item.get("options", []):
-                view.insert("end", "    ◯ " + (v if isinstance(v, str) else v.get("label", "")) + "\n")
-            if item.get("other"): view.insert("end", "    ↳ поле уточнения при выборе другого варианта\n")
-            view.insert("end", "\n")
-        view.configure(state="disabled")
+        try:
+            engine.validate_config(self.config_data)
+        except engine.ConfigError as exc:
+            messagebox.showerror("Ошибка анкеты", str(exc), parent=self)
+            return
+        from form_preview import PreviewWindow
+        PreviewWindow(self, deepcopy(self.config_data))
 
     def create(self):
         if self.busy: return
@@ -646,6 +649,8 @@ class App(tk.Tk):
         self.user_settings["window_geometry"] = self.geometry()
         if self.path:
             self.user_settings["last_form_path"] = str(self.path.resolve())
+        else:
+            self.user_settings.pop("last_form_path", None)
         try:
             engine.save_settings(self.user_settings)
         except OSError as exc:
