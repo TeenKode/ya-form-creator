@@ -19,7 +19,7 @@ test('worker: site boundary, OAuth-only Identity Hub, scoped jobs and verified o
   assert.equal((await send({type:'create',id:job.id,confirm:false})).ok,false);
   globalThis.fetch=async(url,options)=>{assert.equal(url,'https://oauth.yandex.ru/token');const body=options.body;assert.equal(body.get('client_secret'),null);assert.ok(body.get('code_verifier').length>=43);assert.equal(body.get('code'),'synthetic-code');return Response.json({access_token:'synthetic-oauth-token',expires_in:3600});};
   const login=()=>send({type:'oauth',clientId:s.clientId,remember:true});
-  assert.equal((await login()).ok,true);assert.equal(flow.searchParams.get('code_challenge_method'),'S256');assert.equal(flow.searchParams.get('scope'),'forms:read forms:write');assert.equal(chrome.storage.local.data.credentials.org_header,'X-Cloud-Org-Id');assert.equal(chrome.storage.local.data.credentials.org_id,'');
+  assert.equal((await login()).ok,true);assert.equal(flow.searchParams.get('code_challenge_method'),'S256');assert.equal(flow.searchParams.get('scope'),'forms:read forms:write');assert.equal(flow.searchParams.get('force_confirm'),'yes');assert.equal(chrome.storage.local.data.credentials.org_header,'X-Cloud-Org-Id');assert.equal(chrome.storage.local.data.credentials.org_id,'');
   assert.ok(!JSON.stringify((await send({type:'settings'})).data).includes('synthetic-oauth-token'));
   assert.equal((await send({type:'organization-read'})).ok,false);
   assert.equal((await send({type:'organization-open'})).ok,true);assert.equal(opened.at(-1),'https://center.yandex.cloud/');assert.equal((await send({type:'settings'})).data.setupPending,true);
@@ -33,10 +33,27 @@ test('worker: site boundary, OAuth-only Identity Hub, scoped jobs and verified o
   let reads=0;globalThis.fetch=async(url,options)=>{reads++;assert.equal(url,'https://api.forms.yandex.net/v1/users/me');assert.equal(options.headers.Authorization,'OAuth synthetic-oauth-token');assert.equal(options.headers['X-Cloud-Org-Id'],cabinetId);return Response.json({});};
   assert.equal((await send({type:'organization-connect',id:'wrong'})).ok,false);assert.equal(reads,0);
   assert.equal((await send({type:'organization-connect',id:cabinetId,remember:true})).ok,true);assert.equal(reads,1);assert.equal((await send({type:'settings'})).data.configured,true);assert.equal((await send({type:'settings'})).data.setupPending,false);
+  // A confirmation is tied to both the account session and the displayed organization.
+  const confirmed=(await send({type:'settings'})).data.connection_id,original=structuredClone(chrome.storage.session.data.credentials);
+  chrome.storage.session.data.credentials.org_id='bpf00000000000000002';let contacted=0;globalThis.fetch=async()=>{contacted++;return Response.json({});};
+  assert.equal((await send({type:'create',id:job.id,confirm:true,connection_id:confirmed})).ok,false);assert.equal(contacted,0);assert.equal((await send({type:'status',id:job.id},site)).data.status,'pending');
+  chrome.storage.session.data.credentials=original;
+  globalThis.fetch=async(url,options)=>{assert.equal(options.headers['X-Cloud-Org-Id'],cabinetId);return Response.json(url.endsWith('/surveys')&&options.method==='POST'?{id:'a'.repeat(24)}:url.endsWith('/questions')?{id:1}:{});};
+  assert.equal((await send({type:'create',id:job.id,confirm:true,connection_id:confirmed})).data.status,'success');
+  assert.equal((await send({type:'job',id:job.id})).data.organization_id,cabinetId);assert.equal((await send({type:'status',id:job.id},site)).data.organization_id,undefined);
   globalThis.fetch=async()=>new Response('secret must not leak',{status:403});const denied=await send({type:'organization-connect',id:'bpf00000000000000002'});assert.equal(denied.ok,false);assert.ok(!denied.error.includes('secret'));assert.equal(chrome.storage.local.data.credentials.org_id,cabinetId);
   let finish;globalThis.fetch=()=>new Promise(resolve=>finish=resolve);const selecting=send({type:'organization-connect',id:cabinetId});while(!finish)await new Promise(resolve=>setTimeout(resolve,0));await send({type:'forget'});finish(Response.json({}));assert.equal((await selecting).ok,false);assert.equal(chrome.storage.session.data.credentials,undefined);assert.equal(chrome.storage.local.data.credentials,undefined);
   // Old 360 / IAM sessions cannot create forms or appear connected.
   for(const old of [{auth_scheme:'Bearer',org_header:'X-Cloud-Org-Id'},{auth_scheme:'OAuth',org_header:'X-Org-Id'}]){await chrome.storage.local.set({credentials:{...old,token:'legacy',org_id:cabinetId}});assert.equal((await send({type:'settings'})).data.signedIn,false);assert.equal((await send({type:'organization-open'})).ok,false);}
   await send({type:'forget'});
   const launch=chrome.identity.launchWebAuthFlow;chrome.identity.launchWebAuthFlow=async()=>`https://${id}.chromiumapp.org/oauth?code=bad&state=wrong`;assert.equal((await login()).ok,false);chrome.identity.launchWebAuthFlow=launch;
+  const until=async predicate=>{for(let i=0;i<100&&!predicate();i++)await new Promise(r=>setTimeout(r,0));assert.ok(predicate());};
+  let releaseFlow;chrome.identity.launchWebAuthFlow=({url})=>new Promise(resolve=>{const state=new URL(url).searchParams.get('state');releaseFlow=()=>resolve(`https://${id}.chromiumapp.org/oauth?code=test&state=${state}`);});
+  const cancelled=login();await until(()=>!!releaseFlow);await send({type:'forget'});releaseFlow();assert.equal((await cancelled).ok,false);assert.equal(chrome.storage.session.data.credentials,undefined);
+  chrome.identity.launchWebAuthFlow=launch;let releaseToken;globalThis.fetch=()=>new Promise(resolve=>releaseToken=()=>resolve(Response.json({access_token:'late-token'})));
+  const delayed=login();await until(()=>!!releaseToken);await send({type:'forget'});releaseToken();assert.equal((await delayed).ok,false);assert.equal(chrome.storage.local.data.credentials,undefined);
+  const flows=[];chrome.identity.launchWebAuthFlow=({url})=>new Promise(resolve=>{const state=new URL(url).searchParams.get('state');flows.push(()=>resolve(`https://${id}.chromiumapp.org/oauth?code=test&state=${state}`));});globalThis.fetch=async()=>Response.json({access_token:'same-token'});
+  const first=login();await until(()=>flows.length===1);const second=login();await until(()=>flows.length===2);flows[1]();assert.equal((await second).ok,true);const winning=chrome.storage.session.data.credentials.auth_session;flows[0]();assert.equal((await first).ok,false);assert.equal(chrome.storage.session.data.credentials.auth_session,winning);
+  await send({type:'forget'});chrome.identity.launchWebAuthFlow=launch;
+
 });

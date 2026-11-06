@@ -15,7 +15,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
-APP_VERSION = "1.6.1"
+APP_VERSION = "1.6.2"
 API = "https://api.forms.yandex.net/v1"
 def runtime_dir() -> Path:
     """Writable directory adjacent to executable, never PyInstaller's _MEIPASS."""
@@ -238,6 +238,8 @@ def validate_config(config: dict[str, Any], *, allow_empty: bool = False) -> Non
                         raise ConfigError(f"{where}: исключающие варианты нельзя использовать в скрытом вопросе.")
                     if item.get("max_choices", remaining) > remaining:
                         raise ConfigError(f"{where}.max_choices: больше числа обычных вариантов ({remaining}).")
+                if item.get("required") and item.get("max_choices") == 0:
+                    raise ConfigError(f"{where}: обязательный вопрос должен допускать хотя бы один ответ.")
                 for field in ("min_choices", "max_choices"):
                     _validate_nonneg(item, field, where)
                     if field in item and item[field] > len(opts):
