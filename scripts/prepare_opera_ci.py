@@ -19,9 +19,15 @@ if hashlib.sha256(data).hexdigest() != expected:
     raise SystemExit('Opera package checksum mismatch')
 archive.write_bytes(data)
 subprocess.run(['dpkg-deb', '-x', str(archive), str(target / 'unpacked')], check=True)
-binary = target / 'unpacked/usr/lib/x86_64-linux-gnu/opera/opera'
-if not binary.is_file():
-    raise SystemExit('Opera binary missing')
+candidates = []
+for candidate in (target / 'unpacked').rglob('opera'):
+    if candidate.is_file():
+        with candidate.open('rb') as handle:
+            if handle.read(4) == b'\x7fELF':
+                candidates.append(candidate)
+if len(candidates) != 1:
+    raise SystemExit(f'Expected one Opera ELF binary, found {len(candidates)}')
+binary = candidates[0]
 with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env:
     env.write(f'YAFORM_OPERA_BINARY={binary}\n')
 print(f'Prepared official Opera {version}; SHA-256 verified.')
