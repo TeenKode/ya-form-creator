@@ -95,6 +95,7 @@ Python 3.12+, Node.js 22+:
 python -m pip install -r requirements-dev.txt
 npm ci
 python scripts/build_browser.py
+node scripts/build_opera.mjs
 python -m unittest discover -v -p "test*.py"
 npm test
 npx playwright install chromium

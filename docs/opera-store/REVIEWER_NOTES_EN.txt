@@ -1,0 +1,29 @@
+YaFormCreator — reviewer notes
+
+Purpose: send a questionnaire from our static editor to Yandex Forms API after explicit review and confirmation. The toolbar button opens the editor, but the extension is not just a shortcut: it performs Yandex OAuth, keeps credentials in trusted extension storage, reads an organization identifier on demand, shows the review UI, creates questions/conditions, and tracks partial results.
+
+Start: https://teenkode.github.io/ya-form-creator/
+Privacy: https://teenkode.github.io/ya-form-creator/privacy.html (English summary included)
+Source: https://github.com/TeenKode/ya-form-creator
+
+Use a current Opera desktop build. The owner must test the actual store-assigned extension ID and register its OAuth redirect before submission for review. Never claim Chrome-only mocked tests verify live Opera OAuth. Support for callback-only launchWebAuthFlow and a missing getRedirectURL helper is included. Browser integration tests use synthetic API responses and an isolated browser profile, without real credentials or live form creation.
+
+Functional review:
+1. Click the toolbar icon to open the editor. Add a text question and preview it; you can export the JSON without signing in.
+2. Open connection settings. Sign in with an ordinary Yandex ID and grant forms:read/forms:write. A Yandex account with access to Forms for business in an Identity Hub organization is required. We do not provide the maintainer's personal credentials. Federated-only accounts requiring IAM are unsupported.
+3. Open Identity Hub from step 2. Select/create an organization yourself, then return and click the button to read the selected organization. Only a unique visible bpf identifier in the wizard's own cabinet tab is returned. If unavailable, paste the ID from under the organization title. Access is checked with GET /users/me before saving.
+4. Return to the site and click Create in Yandex. Review the questionnaire and organization in the extension page. The create button is disabled until the explicit confirmation checkbox is selected. Publication is OFF by default regardless of input JSON.
+5. Create a draft with synthetic questions only in your test organization. Creation makes a new remote form. No automatic retries/deletion. On failure a partial-draft link is preserved when available.
+6. Logout removes saved connection data; delete remote test forms in Yandex separately.
+
+Permissions:
+storage: session credentials, optional persistent login, connection preferences and jobs. TRUSTED_CONTEXTS prevents content scripts from reading storage.
+identity: Authorization Code + PKCE S256 with state and callback-origin/path validation; no client secret.
+api.forms.yandex.net: create/read/publish forms only after confirmation; GET access checks.
+oauth.yandex.ru: authorization-code token exchange.
+center.yandex.cloud and org.yandex.cloud: a passive isolated content script reads visible organization IDs only when the extension asks, following the user's button click. No cookies, passwords, private cabinet APIs or background polling.
+teenkode.github.io/ya-form-creator/*: content-script bridge limited to version ping, opening settings, preparing a questionnaire for review, and scoped job status. The website cannot fetch credentials or directly trigger create.
+
+All executable code ships in the ZIP. Source is formatted and not obfuscated. No analytics, advertisements, affiliate links or external JavaScript. Only explicit Yandex API calls transmit the user's form/authentication information. Repository and static-file hosting are by GitHub; no application backend.
+
+Support: repository issues. Please do not publish credentials or personal information in an issue.

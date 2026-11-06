@@ -5,7 +5,11 @@
   "scripts": {
     "build": "python scripts/build_browser.py",
     "test": "node --test browser/tests/*.test.mjs",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "build:opera": "node scripts/build_opera.mjs"
   },
-  "devDependencies": {"@playwright/test": "1.65.0"}
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "prettier": "3.6.2"
+  }
 }

@@ -1,3 +1,4 @@
+import {redirectURL,launchAuthFlow} from './oauth.mjs';
 import {dryRun,VERSION} from './core.mjs';
 import {callApi,createForm,validateAuth,validateCredentials} from './api.mjs';
 const SITE='https://teenkode.github.io/ya-form-creator/';
@@ -51,7 +52,7 @@ async function dispatch(message,sender){
   if(message.type==='settings'){
     let c;try{c=await activeAuth();}catch{}const local=await chrome.storage.local.get(['credentials','clientId']);
     const setup=(await chrome.storage.session.get('organizationSetup')).organizationSetup;
-    return {signedIn:!!c,configured:!!c?.org_id,org_id:c?.org_id??'',org_name:'',remember:!!c&&!!local.credentials,setupPending:!!c&&!!setup&&Date.now()-setup.created_at<3600000,clientId:local.clientId??DEFAULT_CLIENT_ID,redirect:chrome.identity.getRedirectURL('oauth')};
+    return {signedIn:!!c,configured:!!c?.org_id,org_id:c?.org_id??'',org_name:'',remember:!!c&&!!local.credentials,setupPending:!!c&&!!setup&&Date.now()-setup.created_at<3600000,clientId:local.clientId??DEFAULT_CLIENT_ID,redirect:redirectURL(chrome.identity,chrome.runtime.id)};
   }
   if(message.type==='organization-open'){
     const c=await activeAuth();const tab=await chrome.tabs.create({url:'https://center.yandex.cloud/'});
@@ -84,12 +85,12 @@ async function dispatch(message,sender){
   }
   if(message.type==='oauth'){
     const clientId=message.clientId?.trim();if(!/^[a-f0-9]{32}$/i.test(clientId??''))throw new Error('Укажите ClientID OAuth-приложения (32 символа).');
-    const redirect=chrome.identity.getRedirectURL('oauth'),state=crypto.randomUUID();
+    const redirect=redirectURL(chrome.identity,chrome.runtime.id),state=crypto.randomUUID();
     const verifier=Array.from(crypto.getRandomValues(new Uint8Array(32)),v=>v.toString(16).padStart(2,'0')).join('');
     const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));const challenge=btoa(String.fromCharCode(...new Uint8Array(hash))).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
     const scope='forms:read forms:write';
     const u=new URL('https://oauth.yandex.ru/authorize');u.search=new URLSearchParams({response_type:'code',client_id:clientId,redirect_uri:redirect,scope,state,code_challenge:challenge,code_challenge_method:'S256'});
-    let callback;try{callback=await chrome.identity.launchWebAuthFlow({url:u.href,interactive:true});}catch{throw new Error('Вход отменён или Redirect URI не зарегистрирован для этого расширения.');}
+    let callback;try{callback=await launchAuthFlow(chrome.identity,chrome.runtime,{url:u.href,interactive:true});}catch{throw new Error('Вход отменён или Redirect URI не зарегистрирован для этого расширения.');}
     const returned=new URL(callback);if(returned.origin!==new URL(redirect).origin||returned.pathname!==new URL(redirect).pathname||returned.searchParams.get('state')!==state||!returned.searchParams.get('code'))throw new Error('Ответ авторизации не прошёл проверку.');
     let response;try{response=await fetch('https://oauth.yandex.ru/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',code:returned.searchParams.get('code'),client_id:clientId,code_verifier:verifier}),credentials:'omit',redirect:'error',signal:AbortSignal.timeout(20000)});}catch{throw new Error('Не удалось завершить обмен кода авторизации.');}
     if(!response.ok)throw new Error('Яндекс не выдал токен. Проверьте ClientID, разрешения и Redirect URI.');

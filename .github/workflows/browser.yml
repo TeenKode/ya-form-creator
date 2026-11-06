@@ -13,6 +13,10 @@ concurrency:
 jobs:
   browser:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, opera]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,23 +29,38 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - run: npm ci
       - run: python scripts/build_browser.py
+      - run: node scripts/build_opera.mjs
       - run: npm test
       # ubuntu-latest already includes the system libraries used by its Chrome.
       - run: npx playwright install chromium
         timeout-minutes: 5
+      - run: sudo apt-get install --yes --no-install-recommends gsettings-desktop-schemas
+        if: matrix.browser == 'opera'
+        timeout-minutes: 2
+      - run: python scripts/prepare_opera_ci.py
+        if: matrix.browser == 'opera'
+        timeout-minutes: 5
       - run: npm run test:browser
+        timeout-minutes: 5
+      - run: node scripts/build_opera.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Browser-QA
+          name: ${{ matrix.browser == 'opera' && 'Opera-QA' || 'Browser-QA' }}
           path: test-results/
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
+        if: matrix.browser == 'chromium'
+        with:
+          name: Opera-submission
+          path: browser-build/opera-submission/
+      - uses: actions/upload-artifact@v4
+        if: matrix.browser == 'chromium'
         with:
           name: YaFormCreator-extension
           path: web-dist/yaform-extension.zip
       - uses: actions/upload-pages-artifact@v3
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && matrix.browser == 'chromium'
         with:
           path: web-dist
   deploy:
