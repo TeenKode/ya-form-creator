@@ -205,7 +205,7 @@ def validate_config(config: dict[str, Any], *, allow_empty: bool = False) -> Non
                 raise ConfigError(f"{where}.exclusive_options поддерживается только для checkbox.")
             if qtype == "checkbox":
                 explicit = item.get("exclusive_options")
-                if explicit is not None:
+                if "exclusive_options" in item:
                     if not isinstance(explicit, list) or any(not _nonempty(v) for v in explicit):
                         raise ConfigError(f"{where}.exclusive_options: нужен список подписей вариантов.")
                     if len(set(explicit)) != len(explicit):
