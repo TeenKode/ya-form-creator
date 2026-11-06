@@ -11,6 +11,7 @@ function internal(sender){try{return sender.id===chrome.runtime.id&&sender.url?.
 async function credentials(){await ready;const s=await chrome.storage.session.get('credentials');return s.credentials??(await chrome.storage.local.get('credentials')).credentials;}
 async function saveCredentials(data,remember,{keepCandidates=false}={}){validateAuth(data);if(data.org_id)validateCredentials(data);await ready;if(!keepCandidates)await chrome.storage.session.remove('organizationCandidates');await chrome.storage.session.set({credentials:data});if(remember)await chrome.storage.local.set({credentials:data});else await chrome.storage.local.remove('credentials');}
 async function authStamp(c){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(c.auth_scheme+'\n'+c.token))),v=>v.toString(16).padStart(2,'0')).join('');}
+async function cacheOrganizations(c,items){const current=await credentials();if(!current||await authStamp(current)!==await authStamp(c))throw new Error('Аккаунт изменился. Повторите поиск.');await chrome.storage.session.set({organizationCandidates:{items,stamp:await authStamp(c),created_at:Date.now()}});}
 async function readJob(id){if(typeof id!=='string'||!/^[a-f0-9-]{36}$/.test(id))throw new Error('Неизвестная операция.');return(await chrome.storage.session.get('job:'+id))['job:'+id];}
 async function putJob(job){await chrome.storage.session.set({['job:'+job.id]:job});}
 function safeStatus(job){return {id:job.id,status:job.status,phase:job.phase,done:job.done,total:job.total,error:job.error,result:job.result};}
@@ -40,7 +41,7 @@ async function dispatch(message,sender){
   }
   if(!own)throw new Error('Действие доступно только в окне расширения.');
   if(message.type==='settings'){
-    const c=await credentials();const local=await chrome.storage.local.get(['credentials','clientId']);return {signedIn:!!c,configured:!!c?.org_id,org_id:c?.org_id??'',org_name:c?.org_name??'',org_header:c?.org_header??'X-Org-Id',auth_scheme:c?.auth_scheme??'OAuth',remember:!!local.credentials,clientId:local.clientId??DEFAULT_CLIENT_ID,redirect:chrome.identity.getRedirectURL('oauth')};
+    const c=await credentials();const local=await chrome.storage.local.get(['credentials','clientId']);const setup=(await chrome.storage.session.get('organizationSetup')).organizationSetup;return {signedIn:!!c,configured:!!c?.org_id,org_id:c?.org_id??'',org_name:c?.org_name??'',org_header:c?.org_header??'X-Org-Id',auth_scheme:c?.auth_scheme??'OAuth',remember:!!local.credentials,setupPending:!!setup&&Date.now()-setup.created_at<86400000,clientId:local.clientId??DEFAULT_CLIENT_ID,redirect:chrome.identity.getRedirectURL('oauth')};
   }
   if(message.type==='save'){
     const old=await credentials(),c={auth_scheme:message.auth_scheme,org_header:message.org_header,org_id:message.org_id?.trim(),token:message.token?.trim()||old?.token,...(!message.token?.trim()&&old?.expires_at?{expires_at:old.expires_at}:{})};
@@ -48,18 +49,30 @@ async function dispatch(message,sender){
   }
   if(message.type==='organizations'){
     const c=await credentials();validateAuth(c);await chrome.storage.session.remove('organizationCandidates');
-    const items=await listOrganizations(c,message.org_header);const current=await credentials();if(!current||await authStamp(current)!==await authStamp(c))throw new Error('Аккаунт изменился. Повторите поиск.');
-    await chrome.storage.session.set({organizationCandidates:{items,stamp:await authStamp(c),created_at:Date.now()}});return{items};
+    const items=await listOrganizations(c,message.org_header);await cacheOrganizations(c,items);return{items};
   }
+  if(message.type==='cloud-setup-start'){
+    const c=await credentials(),cached=(await chrome.storage.session.get('organizationCandidates')).organizationCandidates;
+    const comparable=c?.auth_scheme==='Bearer'&&cached&&Date.now()-cached.created_at<600000&&cached.stamp===await authStamp(c)&&cached.items.every(x=>x.org_header==='X-Cloud-Org-Id');
+    const setup={created_at:Date.now(),before:comparable?cached.items.map(x=>x.id):null,stamp:comparable?cached.stamp:null};
+    await chrome.tabs.create({url:'https://center.yandex.cloud/'});await chrome.storage.session.set({organizationSetup:setup});return{opened:true};
+  }
+  if(message.type==='cloud-setup-check'){
+    const setup=(await chrome.storage.session.get('organizationSetup')).organizationSetup;if(!setup||Date.now()-setup.created_at>86400000)throw new Error('Откройте мастер создания организации заново.');
+    const c=await credentials();if(!c||c.auth_scheme!=='Bearer')throw new Error('Добавьте пользовательский IAM-токен в разделе «Или вставить готовый токен», чтобы найти организацию Cloud.');validateAuth(c);
+    await chrome.storage.session.remove('organizationCandidates');const items=await listOrganizations(c,'X-Cloud-Org-Id');await cacheOrganizations(c,items);
+    const comparable=Array.isArray(setup.before)&&setup.stamp===await authStamp(c);return{items,newIds:comparable?items.filter(x=>!setup.before.includes(x.id)).map(x=>x.id):[],compared:comparable};
+  }
+  if(message.type==='cloud-setup-cancel'){await chrome.storage.session.remove('organizationSetup');return{closed:true};}
   if(message.type==='select-org'){
     const c=await credentials();validateAuth(c);const cached=(await chrome.storage.session.get('organizationCandidates')).organizationCandidates;
     if(!cached||Date.now()-cached.created_at>600000||cached.stamp!==await authStamp(c))throw new Error('Повторите поиск организаций.');
     const item=cached.items.find(x=>x.id===message.id&&x.org_header===message.org_header);if(!item)throw new Error('Выберите организацию из списка.');
     const next={...c,org_id:item.id,org_name:item.name,org_header:item.org_header};await callApi('/users/me','GET',next);
     const current=await credentials();if(!current||await authStamp(current)!==await authStamp(c))throw new Error('Аккаунт изменился. Повторите вход.');
-    await saveCredentials(next,!!message.remember,{keepCandidates:true});return{selected:true,name:item.name,id:item.id};
+    await saveCredentials(next,!!message.remember,{keepCandidates:true});if(item.org_header==='X-Cloud-Org-Id')await chrome.storage.session.remove('organizationSetup');return{selected:true,name:item.name,id:item.id};
   }
-  if(message.type==='forget'){await chrome.storage.local.remove('credentials');await chrome.storage.session.remove(['credentials','organizationCandidates']);return{forgotten:true};}
+  if(message.type==='forget'){await chrome.storage.local.remove('credentials');await chrome.storage.session.remove(['credentials','organizationCandidates','organizationSetup']);return{forgotten:true};}
   if(message.type==='access'){await callApi('/users/me','GET',await credentials());return{connected:true};}
   if(message.type==='job'){
     const job=await readJob(message.id);if(!job)throw new Error('Операция не найдена.');return{...safeStatus(job),config:job.config,created_at:job.created_at};

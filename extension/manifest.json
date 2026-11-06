@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YaFormCreator — создание Яндекс Форм",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Передаёт анкету с сайта YaFormCreator в Яндекс Формы после подтверждения. Токен остаётся в расширении.",
   "minimum_chrome_version": "116",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2xxhcAiMWUsvwb6QA5rDF5Akat4vFs1XddZpAFlMOGU6mPm/JIoqDWTwpQ2XCPL9WaKdhLcLekH4VeSinXda7xqZzXeoN+SJuCUbSr2ezf3a/cosSF3nwzu4aC2JfxN09xTPfU3scvD3+60Kil5cx0hFdJgJvUcgdwmR3gSZ0PXuRpbxMJ5nX03twfWxx1bIzv1MjSmjpyE6iU+8f4zSOD7RaV/ijzv8dIHoG5JCNPXp7t4eh+SeeYkkrKnFSbK/MN/4PwpLN3+XEC302Quu15t3Bsno6X+ViTa5H9GHbKyMGmOoFmFivB5Vxfb01cxNwnGjj+zojOptXXkdvwyHfQIDAQAB",
