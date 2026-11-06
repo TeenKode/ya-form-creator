@@ -54,6 +54,34 @@ TIMEOUT = 30
 SLUG_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
 ENUM_TYPES = {"radio", "checkbox", "dropdown", "scale", "stars", "onerow"}
 CONDITION_SOURCE_TYPES = {"radio", "checkbox", "dropdown"}
+# Conservative exact-label defaults; a question may override them with exclusive_options.
+AUTO_EXCLUSIVE = frozenset({
+    "не использую", "не пользуюсь", "не применяю", "никогда",
+    "ничего", "ничего из перечисленного", "ничего не мешает",
+    "нет необходимости", "затрудняюсь ответить", "не знаю",
+    "никакие", "ни один из перечисленных",
+    "none of the above", "i do not use", "not applicable",
+})
+EXCLUSIVE_GATE_LABEL = "Выбрать варианты из списка"
+
+
+def _option_label(option: str | dict) -> str:
+    return option if isinstance(option, str) else option["label"]
+
+
+def exclusive_options(question: dict) -> list[str]:
+    """Options to use as a mutually exclusive answer, never as normal checkboxes.
+
+    An explicitly supplied (even empty) list overrides automatic recognition.
+    """
+    if question.get("type") != "checkbox":
+        return []
+    if "exclusive_options" in question:
+        return list(question["exclusive_options"])
+    return [label for opt in question.get("options", [])
+            if (label := _option_label(opt)).strip().rstrip(".!?").casefold() in AUTO_EXCLUSIVE]
+
+
 QUESTION_TYPES = ENUM_TYPES | {"text", "matrix", "boolean", "integer", "date", "section", "comment", "api"}
 
 
@@ -171,7 +199,30 @@ def validate_config(config: dict[str, Any], *, allow_empty: bool = False) -> Non
                         raise ConfigError(f"{where}.options.scores: ожидается число.")
             answer_options[slug] = set(v if isinstance(v, str) else v["label"] for v in opts)
             source_types[slug] = qtype
+            if qtype != "checkbox" and "exclusive_options" in item:
+                raise ConfigError(f"{where}.exclusive_options поддерживается только для checkbox.")
             if qtype == "checkbox":
+                explicit = item.get("exclusive_options")
+                if explicit is not None:
+                    if not isinstance(explicit, list) or any(not _nonempty(v) for v in explicit):
+                        raise ConfigError(f"{where}.exclusive_options: нужен список подписей вариантов.")
+                    if len(set(explicit)) != len(explicit):
+                        raise ConfigError(f"{where}.exclusive_options: повторяющиеся значения.")
+                    unknown = set(explicit) - answer_options[slug]
+                    if unknown:
+                        raise ConfigError(f"{where}.exclusive_options: варианты отсутствуют: {', '.join(sorted(unknown))}.")
+                exclusive = exclusive_options(item)
+                if exclusive:
+                    remaining = len(opts) - len(exclusive)
+                    if remaining < 2:
+                        raise ConfigError(f"{where}: после выделения исключающих вариантов нужны минимум два обычных.")
+                    if item.get("has_quiz") or any(isinstance(v, dict) and ("correct" in v or "scores" in v)
+                                                  for v in opts):
+                        raise ConfigError(f"{where}: исключающие варианты в тестах пока не поддерживаются.")
+                    if item.get("hidden"):
+                        raise ConfigError(f"{where}: исключающие варианты нельзя использовать в скрытом вопросе.")
+                    if item.get("max_choices", remaining) > remaining:
+                        raise ConfigError(f"{where}.max_choices: больше числа обычных вариантов ({remaining}).")
                 for field in ("min_choices", "max_choices"):
                     _validate_nonneg(item, field, where)
                     if field in item and item[field] > len(opts):
@@ -222,6 +273,8 @@ def validate_config(config: dict[str, Any], *, allow_empty: bool = False) -> Non
                 if field in other and not _nonempty(other[field]):
                     raise ConfigError(f"{where}.other.{field}: укажите текст.")
             other_option = other.get("option", "Другое")
+            if qtype == "checkbox" and other_option in exclusive_options(item):
+                raise ConfigError(f"{where}.other.option: исключающий вариант нельзя использовать как «Другое».")
             if not isinstance(other_option, str) or other_option not in answer_options[slug]:
                 raise ConfigError(f"{where}.other.option: вариант {other_option!r} отсутствует.")
             other_slug = other.get("slug", f"{slug}_other")
@@ -233,6 +286,12 @@ def validate_config(config: dict[str, Any], *, allow_empty: bool = False) -> Non
             raise ConfigError(f"Слаг поля 'Другое' {other_slug!r} уже занят.")
         slugs.add(other_slug)
         indices[other_slug] = indices[source]
+    for item in questions:
+        if item.get("type") == "checkbox" and exclusive_options(item):
+            gate = item["slug"] + "_choice"
+            if gate in slugs:
+                raise ConfigError(f"Слаг служебного переключателя {gate!r} уже занят.")
+            slugs.add(gate)
     conditions = config.get("conditions", [])
     if not isinstance(conditions, list):
         raise ConfigError("conditions должен быть массивом.")
@@ -335,8 +394,67 @@ def build_question(q: dict) -> dict:
     raise ConfigError(f"Неизвестный тип {qtype!r}.")
 
 
-def expand_questions(config: dict) -> tuple[list[dict], list[dict]]:
+def resolve_exclusive_config(config: dict) -> dict:
+    """Represent exclusive checkbox answers as Yandex-supported radio + conditional list.
+
+    Yandex Forms does not provide a native checkbox-level exclusive answer.
+    This transformation is applied to API payloads AND the local preview.
+    It never alters the JSON saved by the user.
+    """
     validate_config(config)
+    result = deepcopy(config)
+    info: dict[str, tuple[str, set[str]]] = {}
+    questions = []
+    for q in result["questions"]:
+        exclusions = exclusive_options(q)
+        if not exclusions:
+            questions.append(q)
+            continue
+        gate_slug = q["slug"] + "_choice"
+        info[q["slug"]] = (gate_slug, set(exclusions))
+        gate = {"type": "radio", "slug": gate_slug, "label": q["label"],
+                "options": [EXCLUSIVE_GATE_LABEL, *exclusions],
+                "required": bool(q.get("required", False))}
+        if q.get("comment"):
+            gate["comment"] = q["comment"]
+        q.pop("exclusive_options", None)
+        q["options"] = [opt for opt in q["options"] if _option_label(opt) not in exclusions]
+        q["label"] = "Уточните ответ: " + q["label"]
+        q.pop("comment", None)
+        # Once the participant opts into the list, they must actually select an option.
+        q["required"] = True
+        questions.extend((gate, q))
+    if not info:
+        return result
+    rules = []
+    for rule in result.get("conditions", []):
+        rule = deepcopy(rule)
+        target, source = rule["target"], rule["source"]
+        if target in info:
+            rule["target"] = info[target][0]
+        if source in info:
+            gate_slug, exclusions = info[source]
+            chosen = set(rule["answers"])
+            if chosen & exclusions:
+                if not chosen <= exclusions:
+                    raise ConfigError(f"conditions: нельзя смешивать обычные и исключающие ответы в одном условии ({source}). Разделите условие.")
+                if rule.get("operator", "and") == "and" and len(chosen) > 1 and rule.get("condition", "eq") == "eq":
+                    raise ConfigError(f"conditions: несколько исключающих ответов одновременно невозможны ({source}). Используйте operator=or.")
+                rule["source"] = gate_slug
+            elif rule.get("condition", "eq") == "neq":
+                raise ConfigError(f"conditions: условие neq для {source} неоднозначно при исключающих вариантах. Используйте явные ответы.")
+        rules.append(rule)
+    for slug, (gate_slug, _exclusions) in info.items():
+        rules.append({"target": slug, "source": gate_slug,
+                      "answers": [EXCLUSIVE_GATE_LABEL]})
+    result["questions"] = questions
+    result["conditions"] = rules
+    validate_config(result)
+    return result
+
+
+def expand_questions(config: dict) -> tuple[list[dict], list[dict]]:
+    config = resolve_exclusive_config(config)
     payloads = []
     conditions = deepcopy(config.get("conditions", []))
     for q in config["questions"]:
