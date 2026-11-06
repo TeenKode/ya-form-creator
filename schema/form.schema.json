@@ -1,0 +1,548 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/TeenKode/ya-form-creator/main/schema/form.schema.json",
+  "title": "YaFormCreator configuration (1.1.0+)",
+  "description": "AI output contract. Run engine validation for cross-field constraints, unique slugs/labels, dependencies and min/max ordering.",
+  "type": "object",
+  "required": [
+    "form",
+    "questions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "form": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "allow_multiple_answers": {
+          "type": "boolean"
+        },
+        "need_auth": {
+          "type": "boolean"
+        },
+        "publish_by_default": {
+          "type": "boolean"
+        },
+        "submit_text": {
+          "type": "string"
+        },
+        "success_title": {
+          "type": "string"
+        },
+        "success_subtitle": {
+          "type": "string"
+        }
+      }
+    },
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/question"
+      }
+    },
+    "conditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "target",
+          "source",
+          "answers"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+          },
+          "answers": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "\\S"
+            }
+          },
+          "operator": {
+            "enum": [
+              "and",
+              "or"
+            ]
+          },
+          "condition": {
+            "enum": [
+              "eq",
+              "neq"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "option": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        {
+          "type": "object",
+          "required": [
+            "label"
+          ],
+          "properties": {
+            "label": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "slug": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+            },
+            "hidden": {
+              "type": "boolean"
+            },
+            "correct": {
+              "type": "boolean"
+            },
+            "scores": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "question": {
+      "type": "object",
+      "required": [
+        "type",
+        "label"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "radio",
+            "checkbox",
+            "dropdown",
+            "scale",
+            "stars",
+            "onerow",
+            "text",
+            "matrix",
+            "boolean",
+            "integer",
+            "date",
+            "section",
+            "comment",
+            "api"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "slug": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "comment": {
+          "type": "string"
+        },
+        "placeholder": {
+          "type": "string"
+        },
+        "multiline": {
+          "type": "boolean"
+        },
+        "header": {
+          "type": "boolean"
+        },
+        "has_quiz": {
+          "type": "boolean"
+        },
+        "show_first": {
+          "type": "boolean"
+        },
+        "show_suggest": {
+          "type": "boolean"
+        },
+        "widget": {
+          "enum": [
+            "radio",
+            "checkbox",
+            "dropdown",
+            "stars",
+            "onerow"
+          ]
+        },
+        "modify_choices": {
+          "enum": [
+            "",
+            "natural",
+            "sort",
+            "shuffle"
+          ]
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/option"
+          },
+          "minItems": 2
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/option"
+          },
+          "minItems": 1
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/option"
+          },
+          "minItems": 2
+        },
+        "min_choices": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_choices": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "min_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "min": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "max": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "format": {
+          "enum": [
+            "plain",
+            "full_name",
+            "phone",
+            "email",
+            "url",
+            "inn",
+            "decimal"
+          ]
+        },
+        "other": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "option": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "slug": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+            },
+            "label": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "placeholder": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "multiline": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "validators": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "pattern": "\\S"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "initial": {}
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "radio",
+                  "checkbox",
+                  "dropdown",
+                  "scale",
+                  "stars",
+                  "onerow"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "options"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "matrix"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "rows",
+              "columns"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "api"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "payload"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "integer"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "type": "integer"
+              },
+              "max": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "date"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "format": "date"
+              },
+              "max": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "format": "date"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "not": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "section",
+                    "comment"
+                  ]
+                }
+              },
+              "required": [
+                "type"
+              ]
+            }
+          },
+          "then": {
+            "required": [
+              "slug"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "format"
+            ]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "const": "text"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "format"
+            ],
+            "properties": {
+              "format": {
+                "not": {
+                  "const": "plain"
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "multiline": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "hidden"
+            ],
+            "properties": {
+              "hidden": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "required": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "other"
+            ],
+            "properties": {
+              "other": {
+                "type": "object"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "radio",
+                  "checkbox",
+                  "dropdown"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
