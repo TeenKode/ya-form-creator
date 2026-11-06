@@ -2,7 +2,7 @@ import {dryRun,TYPES} from './core.mjs';
 const $=id=>document.getElementById(id),id=new URL(location.href).searchParams.get('job');let active=false,current;
 async function send(message){const r=await chrome.runtime.sendMessage(message);if(!r?.ok)throw new Error(r?.error??'Расширение недоступно.');return r.data;}
 function show(text,error=false){$('status').textContent=text;$('status').className=error?'error':'success';}
-async function account(){const s=await send({type:'settings'});$('account').textContent=s.configured?`${s.org_name||s.org_id} · ${s.org_header==='X-Org-Id'?'Яндекс 360':'Yandex Cloud'}`:'Подключите Яндекс и укажите организацию.';}
+async function account(){const s=await send({type:'settings'});$('account').textContent=s.configured?`${s.org_name||s.org_id} · Identity Hub`:'Подключите Яндекс и укажите организацию.';}
 function draw(job){current=job;active=job.status==='running';$('confirmation').hidden=job.status!=='pending';$('progress').hidden=!active;if(active){$('progress').max=job.total||1;$('progress').value=job.done||0;show(`Создание: ${job.done??0} из ${job.total??'…'} элементов. Дождитесь результата.`);}
   if(job.status==='error'||job.status==='interrupted')show(job.error,true);
   if(job.status==='success')show(job.result.published?'Форма создана и опубликована.':'Черновик создан. Проверьте его в Яндексе перед публикацией.');

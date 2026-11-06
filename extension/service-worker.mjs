@@ -1,6 +1,5 @@
 import {dryRun,VERSION} from './core.mjs';
 import {callApi,createForm,validateAuth,validateCredentials} from './api.mjs';
-import {listOrganizations} from './organizations.mjs';
 const SITE='https://teenkode.github.io/ya-form-creator/';
 const DEFAULT_CLIENT_ID='a7f96f176b4241449864e48e3c3c6966';
 const epoch=crypto.randomUUID();let running=false;
@@ -9,9 +8,18 @@ const ready=harden();
 export function trustedSite(url){try{const u=new URL(url);return u.origin==='https://teenkode.github.io'&&u.pathname.startsWith('/ya-form-creator/');}catch{return false;}}
 function internal(sender){try{return sender.id===chrome.runtime.id&&sender.url?.startsWith(chrome.runtime.getURL(''))&&['/options.html','/review.html'].includes(new URL(sender.url).pathname);}catch{return false;}}
 async function credentials(){await ready;const s=await chrome.storage.session.get('credentials');return s.credentials??(await chrome.storage.local.get('credentials')).credentials;}
-async function saveCredentials(data,remember,{keepCandidates=false}={}){validateAuth(data);if(data.org_id)validateCredentials(data);await ready;if(!keepCandidates)await chrome.storage.session.remove('organizationCandidates');await chrome.storage.session.set({credentials:data});if(remember)await chrome.storage.local.set({credentials:data});else await chrome.storage.local.remove('credentials');}
+async function saveCredentials(data,remember){validateAuth(data);if(data.org_id)validateCredentials(data);await ready;await chrome.storage.session.remove('organizationCandidates');await chrome.storage.session.set({credentials:data});if(remember)await chrome.storage.local.set({credentials:data});else await chrome.storage.local.remove('credentials');}
 async function authStamp(c){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(c.auth_scheme+'\n'+c.token))),v=>v.toString(16).padStart(2,'0')).join('');}
-async function cacheOrganizations(c,items){const current=await credentials();if(!current||await authStamp(current)!==await authStamp(c))throw new Error('Аккаунт изменился. Повторите поиск.');await chrome.storage.session.set({organizationCandidates:{items,stamp:await authStamp(c),created_at:Date.now()}});}
+const organizationId=value=>typeof value==='string'&&/^bpf[a-z0-9]{17}$/.test(value);
+const providerURL=value=>{try{const u=new URL(value);return u.protocol==='https:'&&['center.yandex.cloud','org.yandex.cloud'].includes(u.hostname)&&!u.port&&!u.username&&!u.password;}catch{return false;}};
+async function activeAuth(){const c=await credentials();validateAuth(c);if(c.auth_scheme!=='OAuth'||c.org_header!=='X-Cloud-Org-Id')throw new Error('Войдите через Яндекс заново, чтобы подключить Identity Hub.');return c;}
+async function connectOrganization(c,id,remember){
+  if(!organizationId(id))throw new Error('Скопируйте ID организации под её названием в Cloud Center. Он начинается с bpf и содержит 20 символов.');
+  const next={...c,org_id:id,org_name:'',org_header:'X-Cloud-Org-Id'};
+  await callApi('/users/me','GET',next);
+  const current=await activeAuth();if(await authStamp(current)!==await authStamp(c))throw new Error('Аккаунт изменился. Повторите подключение.');
+  await saveCredentials(next,remember);await chrome.storage.session.remove('organizationSetup');return{connected:true,id};
+}
 async function readJob(id){if(typeof id!=='string'||!/^[a-f0-9-]{36}$/.test(id))throw new Error('Неизвестная операция.');return(await chrome.storage.session.get('job:'+id))['job:'+id];}
 async function putJob(job){await chrome.storage.session.set({['job:'+job.id]:job});}
 function safeStatus(job){return {id:job.id,status:job.status,phase:job.phase,done:job.done,total:job.total,error:job.error,result:job.result};}
@@ -41,39 +49,27 @@ async function dispatch(message,sender){
   }
   if(!own)throw new Error('Действие доступно только в окне расширения.');
   if(message.type==='settings'){
-    const c=await credentials();const local=await chrome.storage.local.get(['credentials','clientId']);const setup=(await chrome.storage.session.get('organizationSetup')).organizationSetup;return {signedIn:!!c,configured:!!c?.org_id,org_id:c?.org_id??'',org_name:c?.org_name??'',org_header:c?.org_header??'X-Org-Id',auth_scheme:c?.auth_scheme??'OAuth',remember:!!local.credentials,setupPending:!!setup&&Date.now()-setup.created_at<86400000,clientId:local.clientId??DEFAULT_CLIENT_ID,redirect:chrome.identity.getRedirectURL('oauth')};
+    let c;try{c=await activeAuth();}catch{}const local=await chrome.storage.local.get(['credentials','clientId']);
+    const setup=(await chrome.storage.session.get('organizationSetup')).organizationSetup;
+    return {signedIn:!!c,configured:!!c?.org_id,org_id:c?.org_id??'',org_name:'',remember:!!c&&!!local.credentials,setupPending:!!c&&!!setup&&Date.now()-setup.created_at<3600000,clientId:local.clientId??DEFAULT_CLIENT_ID,redirect:chrome.identity.getRedirectURL('oauth')};
   }
-  if(message.type==='save'){
-    const old=await credentials(),c={auth_scheme:message.auth_scheme,org_header:message.org_header,org_id:message.org_id?.trim(),token:message.token?.trim()||old?.token,...(!message.token?.trim()&&old?.expires_at?{expires_at:old.expires_at}:{})};
-    await saveCredentials(c,!!message.remember);return{saved:true};
+  if(message.type==='organization-open'){
+    const c=await activeAuth();const tab=await chrome.tabs.create({url:'https://center.yandex.cloud/'});
+    await chrome.storage.session.set({organizationSetup:{tabId:tab.id,stamp:await authStamp(c),created_at:Date.now()}});return{opened:true};
   }
-  if(message.type==='organizations'){
-    const c=await credentials();validateAuth(c);await chrome.storage.session.remove('organizationCandidates');
-    const items=await listOrganizations(c,message.org_header);await cacheOrganizations(c,items);return{items};
+  if(message.type==='organization-read'){
+    const c=await activeAuth(),setup=(await chrome.storage.session.get('organizationSetup')).organizationSetup;
+    if(!setup||Date.now()-setup.created_at>3600000||setup.stamp!==await authStamp(c))throw new Error('Нажмите «Открыть Identity Hub» и выберите организацию заново.');
+    let tab;try{tab=await chrome.tabs.get(setup.tabId);}catch{throw new Error('Вкладка Яндекса закрыта. Откройте Identity Hub заново.');}
+    if(!providerURL(tab.url))throw new Error('Завершите вход и откройте главную страницу организации в Cloud Center.');
+    let result;try{result=await chrome.tabs.sendMessage(setup.tabId,{type:'read-identity-organization'},{frameId:0});}catch{throw new Error('Обновите вкладку Cloud Center или вставьте ID организации ниже.');}
+    if(!organizationId(result?.id))throw new Error('Не удалось однозначно определить организацию. Откройте её главную страницу или скопируйте ID под названием и вставьте ниже.');
+    // Page contents are only a candidate; the next step verifies access against Forms.
+    return{id:result.id};
   }
-  if(message.type==='cloud-setup-start'){
-    const c=await credentials(),cached=(await chrome.storage.session.get('organizationCandidates')).organizationCandidates;
-    const comparable=c?.auth_scheme==='Bearer'&&cached&&Date.now()-cached.created_at<600000&&cached.stamp===await authStamp(c)&&cached.items.every(x=>x.org_header==='X-Cloud-Org-Id');
-    const setup={created_at:Date.now(),before:comparable?cached.items.map(x=>x.id):null,stamp:comparable?cached.stamp:null};
-    await chrome.tabs.create({url:'https://center.yandex.cloud/'});await chrome.storage.session.set({organizationSetup:setup});return{opened:true};
-  }
-  if(message.type==='cloud-setup-check'){
-    const setup=(await chrome.storage.session.get('organizationSetup')).organizationSetup;if(!setup||Date.now()-setup.created_at>86400000)throw new Error('Откройте мастер создания организации заново.');
-    const c=await credentials();if(!c||c.auth_scheme!=='Bearer')throw new Error('Добавьте пользовательский IAM-токен в разделе «Или вставить готовый токен», чтобы найти организацию Cloud.');validateAuth(c);
-    await chrome.storage.session.remove('organizationCandidates');const items=await listOrganizations(c,'X-Cloud-Org-Id');await cacheOrganizations(c,items);
-    const comparable=Array.isArray(setup.before)&&setup.stamp===await authStamp(c);return{items,newIds:comparable?items.filter(x=>!setup.before.includes(x.id)).map(x=>x.id):[],compared:comparable};
-  }
-  if(message.type==='cloud-setup-cancel'){await chrome.storage.session.remove('organizationSetup');return{closed:true};}
-  if(message.type==='select-org'){
-    const c=await credentials();validateAuth(c);const cached=(await chrome.storage.session.get('organizationCandidates')).organizationCandidates;
-    if(!cached||Date.now()-cached.created_at>600000||cached.stamp!==await authStamp(c))throw new Error('Повторите поиск организаций.');
-    const item=cached.items.find(x=>x.id===message.id&&x.org_header===message.org_header);if(!item)throw new Error('Выберите организацию из списка.');
-    const next={...c,org_id:item.id,org_name:item.name,org_header:item.org_header};await callApi('/users/me','GET',next);
-    const current=await credentials();if(!current||await authStamp(current)!==await authStamp(c))throw new Error('Аккаунт изменился. Повторите вход.');
-    await saveCredentials(next,!!message.remember,{keepCandidates:true});if(item.org_header==='X-Cloud-Org-Id')await chrome.storage.session.remove('organizationSetup');return{selected:true,name:item.name,id:item.id};
-  }
+  if(message.type==='organization-connect')return connectOrganization(await activeAuth(),message.id?.trim(),!!message.remember);
   if(message.type==='forget'){await chrome.storage.local.remove('credentials');await chrome.storage.session.remove(['credentials','organizationCandidates','organizationSetup']);return{forgotten:true};}
-  if(message.type==='access'){await callApi('/users/me','GET',await credentials());return{connected:true};}
+  if(message.type==='access'){await callApi('/users/me','GET',await activeAuth());return{connected:true};}
   if(message.type==='job'){
     const job=await readJob(message.id);if(!job)throw new Error('Операция не найдена.');return{...safeStatus(job),config:job.config,created_at:job.created_at};
   }
@@ -81,7 +77,7 @@ async function dispatch(message,sender){
     const job=await readJob(message.id);if(!job||job.status!=='pending'||Date.now()-job.created_at>1800000)throw new Error('Подтверждение истекло или операция уже запускалась. Отправьте анкету с сайта заново.');
     if(message.confirm!==true)throw new Error('Подтвердите создание новой формы.');if(running)throw new Error('Другая форма ещё создаётся. Дождитесь завершения.');
     running=true;
-    try{const c=await credentials();validateCredentials(c);job.status='running';job.epoch=epoch;await putJob(job);
+    try{const c=await activeAuth();validateCredentials(c);job.status='running';job.epoch=epoch;await putJob(job);
       const result=await createForm(job.config,c,{publish:message.publish===true,progress:async update=>{Object.assign(job,update);await putJob(job);}});
       job.status='success';job.result=result;await putJob(job);return safeStatus(job);
     }catch(error){job.status='error';job.error=error.message;if(error.result)job.result=error.result;await putJob(job);return safeStatus(job);}finally{running=false;}
@@ -91,15 +87,15 @@ async function dispatch(message,sender){
     const redirect=chrome.identity.getRedirectURL('oauth'),state=crypto.randomUUID();
     const verifier=Array.from(crypto.getRandomValues(new Uint8Array(32)),v=>v.toString(16).padStart(2,'0')).join('');
     const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));const challenge=btoa(String.fromCharCode(...new Uint8Array(hash))).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
-    const scope='forms:read forms:write'+(message.org_header==='X-Org-Id'?' directory:read_organization':'');
+    const scope='forms:read forms:write';
     const u=new URL('https://oauth.yandex.ru/authorize');u.search=new URLSearchParams({response_type:'code',client_id:clientId,redirect_uri:redirect,scope,state,code_challenge:challenge,code_challenge_method:'S256'});
     let callback;try{callback=await chrome.identity.launchWebAuthFlow({url:u.href,interactive:true});}catch{throw new Error('Вход отменён или Redirect URI не зарегистрирован для этого расширения.');}
     const returned=new URL(callback);if(returned.origin!==new URL(redirect).origin||returned.pathname!==new URL(redirect).pathname||returned.searchParams.get('state')!==state||!returned.searchParams.get('code'))throw new Error('Ответ авторизации не прошёл проверку.');
     let response;try{response=await fetch('https://oauth.yandex.ru/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',code:returned.searchParams.get('code'),client_id:clientId,code_verifier:verifier}),credentials:'omit',redirect:'error',signal:AbortSignal.timeout(20000)});}catch{throw new Error('Не удалось завершить обмен кода авторизации.');}
     if(!response.ok)throw new Error('Яндекс не выдал токен. Проверьте ClientID, разрешения и Redirect URI.');
     let token;try{token=await response.json();}catch{throw new Error('Яндекс вернул некорректный ответ авторизации.');}if(typeof token?.access_token!=='string')throw new Error('Ответ авторизации не содержит токена.');
-    await saveCredentials({token:token.access_token,org_id:'',org_header:message.org_header,auth_scheme:'OAuth',...(token.expires_in?{expires_at:Date.now()+token.expires_in*1000}:{})},!!message.remember);
-    await chrome.storage.local.set({clientId});return{connected:true};
+    await saveCredentials({token:token.access_token,org_id:'',org_header:'X-Cloud-Org-Id',auth_scheme:'OAuth',...(token.expires_in?{expires_at:Date.now()+token.expires_in*1000}:{})},!!message.remember);
+    await chrome.storage.session.remove('organizationSetup');await chrome.storage.local.set({clientId});return{connected:true};
   }
   throw new Error('Неизвестное действие.');
 }
