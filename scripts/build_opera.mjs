@@ -22,7 +22,7 @@ await writeFile(path.join(extension,'manifest.json'),JSON.stringify(manifest,nul
 await cp(path.join(root,'docs','opera-store'),path.join(output,'listing'),{recursive:true});
 await cp(path.join(extension,'icons','icon128.png'),path.join(output,'icon128.png'));
 const screenshots=path.join(output,'screenshots');await mkdir(screenshots);
-for(const name of ['store-connect.png','store-review.png']){
+for(const name of ['store-connect.png','store-review.png','store-confirm.png']){
   try{await cp(path.join(root,'test-results',name),path.join(screenshots,name));}
   catch(e){if(e.code!=='ENOENT')throw e;console.log('Screenshot not yet available: '+name+' (created by CI).');}
 }
