@@ -376,7 +376,7 @@ class CredentialsDialog(tk.Toplevel):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Яндекс Формы — универсальный конструктор")
+        self.title(f"Яндекс Формы — универсальный конструктор v{engine.APP_VERSION}")
         apply_theme(self)
         set_icon(self)
         self.user_settings = engine.load_settings()
