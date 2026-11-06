@@ -27,6 +27,17 @@ def build():
     for output in (SITE, EXTENSION):
         shutil.copy2(ROOT / 'browser' / 'core.mjs', output / 'core.mjs')
     shutil.copy2(ROOT / 'assets' / 'app-icon.png', SITE / 'icon.png')
+    header = (ROOT / 'docs' / 'AI_PROMPT_HEADER_RU.md').read_text(encoding='utf-8')
+    rules = (ROOT / 'AI_JSON_RULES.md').read_text(encoding='utf-8')
+    # The standalone handoff must not tell a tool-less chat to fetch more files.
+    rules = '\n'.join(line for line in rules.splitlines() if not line.startswith('**Входная точка:**'))
+    guide = (ROOT / 'docs' / 'FIELD_GUIDE_RU.md').read_text(encoding='utf-8')
+    schema = (ROOT / 'schema' / 'form.schema.json').read_text(encoding='utf-8')
+    pack = (header + '\n\n--- ПОЛНЫЕ ПРАВИЛА ФОРМАТА ---\n\n' + rules
+            + '\n\n--- СПРАВОЧНИК ПОЛЕЙ ---\n\n' + guide
+            + '\n\n--- JSON SCHEMA ---\n\n' + schema
+            + '\n\n--- КОНЕЦ ПРАВИЛ ---\nОжидай описание анкеты от пользователя.\n')
+    (SITE / 'ai-instructions.txt').write_text(pack, encoding='utf-8', newline='\n')
     (SITE / '.nojekyll').touch()
     with zipfile.ZipFile(SITE / 'yaform-extension.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
         for source in sorted(EXTENSION.rglob('*')):
