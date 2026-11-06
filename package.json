@@ -1,0 +1,11 @@
+{
+  "name": "yaformcreator-browser",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "python scripts/build_browser.py",
+    "test": "node --test browser/tests/*.test.mjs",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {"@playwright/test": "1.65.0"}
+}
