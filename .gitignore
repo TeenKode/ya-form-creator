@@ -1,0 +1,19 @@
+# Personal credentials/settings and user-generated surveys (never commit)
+.yandex_form_credentials.json
+.yandex_form_credentials.json.tmp
+user_settings.json
+user_settings.json.tmp
+*.json
+*.bak
+
+# Python, build artifacts and local tools
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.exe
+.pytest_cache/
+test_payload.json
+*_screenshot*.png
