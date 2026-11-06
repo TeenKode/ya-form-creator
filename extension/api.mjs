@@ -1,11 +1,12 @@
 import {dryRun} from './core.mjs';
 export const API = 'https://api.forms.yandex.net/v1';
-export function validateCredentials(c){
+export function validateAuth(c){
   if(!c||!['OAuth','Bearer'].includes(c.auth_scheme)||!['X-Org-Id','X-Cloud-Org-Id'].includes(c.org_header))throw new Error('Выберите способ входа и тип организации.');
   if(c.auth_scheme==='Bearer'&&c.org_header!=='X-Cloud-Org-Id')throw new Error('IAM-токен работает только с Yandex Cloud.');
-  for(const k of ['token','org_id'])if(typeof c[k]!=='string'||!c[k]||!/^[\x21-\x7e]+$/.test(c[k]))throw new Error('Токен и ID организации нужны без пробелов и переносов строк.');
+  if(typeof c.token!=='string'||!c.token||!/^[\x21-\x7e]+$/.test(c.token))throw new Error('Войдите в Яндекс или укажите токен без пробелов и переносов строк.');
   if(c.expires_at&&c.expires_at<Date.now())throw new Error('Срок токена истёк. Войдите через Яндекс заново.');
 }
+export function validateCredentials(c){validateAuth(c);if(typeof c.org_id!=='string'||!c.org_id||!/^[\x21-\x7e]+$/.test(c.org_id))throw new Error('Выберите организацию или укажите её ID.');}
 export async function callApi(path,method,credentials,payload,{fetcher=fetch,signal}={}){
   validateCredentials(credentials);
   if(!/^\/(users\/me|surveys(?:\/[a-f0-9]{24}(?:\/questions(?:\/[0-9]+\/conditions)?|\/publish)?)?)$/.test(path))throw new Error('Неподдерживаемое действие API.');
