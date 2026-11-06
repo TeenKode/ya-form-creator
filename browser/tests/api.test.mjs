@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {callApi,createForm,validateCredentials} from '../../browser-build/extension/api.mjs';
-const credentials={auth_scheme:'OAuth',org_header:'X-Org-Id',org_id:'synthetic-org',token:'synthetic-test-token'};
+const credentials={auth_scheme:'OAuth',org_header:'X-Cloud-Org-Id',org_id:'synthetic-org',token:'synthetic-test-token'};
 const config={form:{name:'Synthetic',publish_by_default:true},questions:[{type:'radio',slug:'a',label:'A',options:['X','Y']},{type:'text',slug:'b',label:'B',format:'phone'}],conditions:[{source:'a',target:'b',answers:['Y']}]};
 function mock(failAt){const calls=[];let id=10;return{calls,fetcher:async(url,options)=>{
   calls.push({url,...options});if(failAt&&url.includes(failAt))return new Response('private response must not leak',{status:422});
