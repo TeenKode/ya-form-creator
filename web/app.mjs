@@ -1,22 +1,21 @@
+import {installEditor} from './editor.mjs';
+import {duplicateQuestion,deleteQuestion,relatedConditions} from './editor-model.mjs';
+import {analyzeLogic} from './logic-analyzer.mjs';
 import {TYPES,FORMATS,validateConfig,resolveExclusive,expandQuestions,dryRun,visibleSlugs,optionLabel} from './core.mjs';
 import {parseConfigText} from './import-config.mjs';
 import {validInn} from './answer-validation.mjs';
-const SITE_VERSION='1.6.3';
+const SITE_VERSION='1.7.0';
 import {MIN_EXTENSION_VERSION,assessExtension} from './extension-version.mjs';
 const $=id=>document.getElementById(id),CHANNEL='yaform-bridge-v1';let connected=false,jobId=null,jobRunning=false,preparing=false,answers={},blocks=new Map(),effective;
 const fresh=()=>({form:{name:'Новая анкета',allow_multiple_answers:true,need_auth:false,publish_by_default:false},questions:[]});let config=fresh();
 let extension={state:'checking',compatible:false},detection;
-let editing=null;
-const editable=['text','radio','checkbox','dropdown','integer','date','boolean','section','comment'];
 const questionList=document.createElement('section');questionList.className='panel question-list';questionList.setAttribute('aria-label','Редактирование вопросов');$('jsonDetails').before(questionList);
-function questionControls(){const type=$('qType').value;$('formatLabel').hidden=type!=='text';$('optionsLabel').hidden=!['radio','checkbox','dropdown'].includes(type);$('choiceLimits').hidden=type!=='checkbox';for(const id of ['qMinChoices','qMaxChoices'])$(id).disabled=type!=='checkbox';}
-function openQuestion(index=null){editing=index;$('questionForm').reset();$('questionError').textContent='';const q=index===null?null:config.questions[index];
-  if(q&&!editable.includes(q.type)){$('jsonDetails').open=true;$('json').focus();notice('Настройки этого вопроса доступны в разделе «Дополнительно».');return;}
-  $('qType').disabled=!!q;$('qType').value=q?.type??'text';$('qLabel').value=q?.label??'';$('qRequired').checked=q?.required??false;$('qFormat').value=q?.format??'plain';$('qOptions').value=(q?.options??[]).map(optionLabel).join('\n');$('qMinChoices').value=q?.min_choices??'';$('qMaxChoices').value=q?.max_choices??'';questionControls();$('questionForm').querySelector('button[type=submit]').textContent=q?'Сохранить изменения':'Добавить в анкету';$('questionDialog').showModal();}
+const openQuestion=index=>editor.openQuestion(index);
 function renderQuestionList(){questionList.hidden=!config.questions.length;questionList.replaceChildren(text('h2','Ваши вопросы'));config.questions.forEach((q,index)=>{const row=text('div','','question-row');row.append(text('span',`${index+1}. ${q.label}`));const controls=text('div','','question-controls');for(const [label,title,callback]of [
   ['✎','Изменить вопрос',()=>openQuestion(index)],
+  ['⧉','Дублировать вопрос',()=>{try{setConfig(duplicateQuestion(config,index));notice('Вопрос продублирован.');}catch(e){notice(e.message,true);}}],
   ['↑','Поднять вопрос',()=>moveQuestion(index,-1)],['↓','Опустить вопрос',()=>moveQuestion(index,1)],
-  ['×','Удалить вопрос',()=>{if(!confirm('Удалить вопрос «'+q.label+'»?'))return;try{const next=structuredClone(config);next.questions.splice(index,1);setConfig(next);notice('Вопрос удалён.');}catch(e){notice('Сначала исправьте ссылки на этот вопрос в условиях: '+e.message,true);}}]
+  ['×','Удалить вопрос',()=>{const count=relatedConditions(config,index).length;if(!confirm('Удалить вопрос «'+q.label+'»?'+(count?' Связанных условий будет удалено: '+count+'.':'')))return;try{setConfig(deleteQuestion(config,index));notice('Вопрос удалён.'+(count?' Удалено связанных условий: '+count+'.':''));}catch(e){notice(e.message,true);}}]
   ]){const b=text('button',label,'quiet');b.type='button';b.title=title;b.setAttribute('aria-label',title+' '+(index+1));b.addEventListener('click',callback);controls.append(b);}row.append(controls);questionList.append(row);});}
 function moveQuestion(index,step){const to=index+step;if(to<0||to>=config.questions.length)return;try{const next=structuredClone(config);[next.questions[index],next.questions[to]]=[next.questions[to],next.questions[index]];setConfig(next);}catch(e){notice('Перемещение нарушает порядок условий: '+e.message,true);}}
 function notice(text,error=false){$('notice').textContent=text;$('notice').className='notice'+(error?' error':'');}
@@ -77,21 +76,9 @@ $('formName').addEventListener('change',()=>{const name=$('formName').value.trim
 $('new').addEventListener('click',()=>{if(config.questions.length&&!confirm('Начать новую анкету? Сначала сохраните текущую, если она нужна.'))return;jobId=null;setConfig(fresh());$('jobResult').hidden=true;notice('Новая анкета готова. Добавьте вопрос или откройте файл.');});
 $('save').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(config,null,2)+'\n'],{type:'application/json;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='form.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
 $('applyJson').addEventListener('click',()=>{try{setConfig(parseConfigText($('json').value));notice('Изменения сохранены.');}catch(e){notice(e.message,true);}});
-$('validate').addEventListener('click',()=>{try{const plan=dryRun(config);notice(`Проверка пройдена. Сверьте содержание анкеты с вашим заданием.`);}catch(e){notice(e.message,true);}});
+$('validate').addEventListener('click',()=>{try{dryRun(config);const issues=analyzeLogic(config);notice(issues.length?'Структура верна. Возможных логических проблем: '+issues.length+'. Откройте «Проверка логики».':'Проверка пройдена. Сверьте содержание анкеты с вашим заданием.');if(issues.length)editor.openLogic();}catch(e){notice(e.message,true);}});
 $('clearAnswers').addEventListener('click',()=>{answers={};render();});$('preview').addEventListener('submit',e=>{e.preventDefault();const errors=checkAnswers();$('answerResult').textContent=errors.length?errors.join('\n'):'Ответы заполнены правильно.';});
 for(const id of ['add','emptyAdd'])$(id).addEventListener('click',()=>openQuestion());
-$('qType').addEventListener('change',questionControls);
-$('questionForm').addEventListener('submit',e=>{e.preventDefault();try{
-  const type=$('qType').value,q=editing===null?{type,label:$('qLabel').value.trim()}:{...structuredClone(config.questions[editing]),label:$('qLabel').value.trim()};
-  if(!['section','comment'].includes(type)){
-    if(editing===null){const taken=new Set(config.questions.flatMap(q=>[q.slug,q.other?.slug??(q.slug+'_other'),q.slug+'_choice']));let n=1;while(taken.has('q'+n)||taken.has('q'+n+'_other')||taken.has('q'+n+'_choice'))n++;q.slug='q'+n;}
-    q.required=$('qRequired').checked;
-  }
-  if(type==='text'){if(editing===null)q.multiline=false;q.format=$('qFormat').value;if(q.format!=='plain')q.multiline=false;}
-  if(['radio','checkbox','dropdown'].includes(type)){const old=q.options??[];q.options=$('qOptions').value.split('\n').map(s=>s.trim()).filter(Boolean).map(label=>old.find(o=>optionLabel(o)===label)??label);}
-  if(type==='checkbox'){for(const [key,id]of [['min_choices','qMinChoices'],['max_choices','qMaxChoices']]){const value=$(id).value.trim();if(value==='')delete q[key];else q[key]=Number(value);}if((q.min_choices??0)>(q.max_choices??Infinity))throw new Error('Минимум ответов не может быть больше максимума.');}
-  const next=structuredClone(config);if(editing===null)next.questions.push(q);else next.questions[editing]=q;setConfig(next);$('questionDialog').close();notice(editing===null?'Вопрос добавлен.':'Изменения сохранены.');
-}catch(e){$('questionError').textContent=e.message;}});
 $('connect').addEventListener('click',async()=>{if(extension.state==='site-outdated'){location.reload();return;}if(!connected){showExtensionInstall();return;}try{await bridge('options');}catch(e){notice(e.message,true);}});$('help').addEventListener('click',()=>$('helpDialog').showModal());
 $('reloadExtensionPage').addEventListener('click',()=>location.reload());
 $('recheckExtension').addEventListener('click',async()=>{$('recheckExtension').disabled=true;$('extensionCheckStatus').textContent='Проверяем расширение…';try{const result=await detect({fresh:true});if(result.compatible)$('installDialog').close();else{const reload=['missing','site-outdated'].includes(result.state);$('reloadExtensionPage').hidden=!reload;$('extensionCheckStatus').textContent=reload?'Обновите страницу сайта, чтобы подключить обновлённое расширение.':'Обновление пока не обнаружено. Обновите расширение и повторите проверку.';}}finally{$('recheckExtension').disabled=false;}});
@@ -106,7 +93,9 @@ const aiInline=text('button','Подготовить анкету с ИИ','quie
 $('copyAi').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(await loadAi());$('aiStatus').textContent='Скопировано. Теперь вставьте в чат и добавьте своё задание.';}catch{$('aiFallback').open=true;$('aiText').focus();$('aiText').select();$('aiStatus').textContent='Нажмите Ctrl+C, чтобы скопировать выделенный текст.';}});
 $('selectAi').addEventListener('click',()=>{$('aiText').focus();$('aiText').select();});
 $('aiFallback').addEventListener('toggle',()=>{if($('aiFallback').open)loadAi().catch(e=>$('aiStatus').textContent=e.message);});
-$('send').addEventListener('click',async()=>{if(preparing)return;preparing=true;syncSend();try{const result=await detect({fresh:true});if(!result.compatible){notice(result.state==='site-outdated'?'Обновите страницу сайта перед созданием формы.':'Обновите или подключите расширение перед созданием формы.',true);return;}dryRun(config);const job=await bridge('prepare',{config},15000);jobId=job.id;notice('Подтвердите создание формы в открывшейся вкладке.');}catch(e){notice(e.message,true);}finally{preparing=false;syncSend();}});
+$('send').addEventListener('click',async()=>{if(preparing)return;preparing=true;syncSend();try{const result=await detect({fresh:true});if(!result.compatible){notice(result.state==='site-outdated'?'Обновите страницу сайта перед созданием формы.':'Обновите или подключите расширение перед созданием формы.',true);return;}dryRun(config);const issues=analyzeLogic(config);if(issues.length&&!confirm('Найдены возможные логические проблемы: '+issues.length+'. Продолжить создание без исправлений?')){editor.openLogic();return;}const job=await bridge('prepare',{config},15000);jobId=job.id;notice('Подтвердите создание формы в открывшейся вкладке.');}catch(e){notice(e.message,true);}finally{preparing=false;syncSend();}});
 setInterval(async()=>{if(!jobId)return;try{const job=await bridge('status',{jobId});jobRunning=job.status==='running';syncSend();if(job.status==='running')notice(`Создание в Яндексе: ${job.done??0} из ${job.total??'…'} элементов.`);if(['success','error','interrupted'].includes(job.status)){const box=$('jobResult');box.hidden=false;box.replaceChildren(text('h2',job.status==='success'?(job.result.published?'Форма опубликована':'Черновик создан'):'Создание остановлено'));box.append(text('p',job.error??'Откройте форму в Яндексе и проверьте её.'));if(job.result){for(const [label,key]of [['Редактировать форму','edit_url'],['Ссылка для заполнения','fill_url']]){const a=text('a',label+' ↗');a.href=job.result[key];a.target='_blank';a.rel='noreferrer';box.append(a);}}jobId=null;}}catch(e){notice(e.message,true);jobId=null;jobRunning=false;syncSend();}},1700);
 $('version').textContent=SITE_VERSION;
+const editor=installEditor({getConfig:()=>config,commit:setConfig,notice});
+document.addEventListener('keydown',e=>{if(document.querySelector('dialog[open]'))return;const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);if(e.key==='F6'){e.preventDefault();editor.openLogic();}else if(e.key==='F5'){e.preventDefault();$('preview').scrollIntoView({behavior:'smooth'});}else if((e.ctrlKey||e.metaKey)&&!e.altKey){const id={n:'new',o:'file',s:'save'}[e.key.toLowerCase()];if(id){e.preventDefault();$(id).click();}}else if(!typing&&e.key==='Delete'){const row=document.activeElement?.closest('.question-row');row?.querySelector('button[title="Удалить вопрос"]')?.click();}});
 try{const draft=localStorage.getItem('yaform:draft:v1');if(draft){const data=JSON.parse(draft);validateConfig(data,{allowEmpty:true});if(data.questions.length)dryRun(data);config=data;}}catch{notice('Локальная копия не восстановлена. Откройте сохранённый JSON.',true);}render();detect();setTimeout(detect,2500);window.addEventListener('focus',detect);

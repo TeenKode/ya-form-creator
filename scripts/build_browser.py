@@ -26,6 +26,8 @@ def build():
     shutil.copytree(ROOT / 'extension' / 'icons', EXTENSION / 'icons')
     for output in (SITE, EXTENSION):
         shutil.copy2(ROOT / 'browser' / 'core.mjs', output / 'core.mjs')
+    for name in ('editor-model.mjs', 'logic-analyzer.mjs'):
+        shutil.copy2(ROOT / 'browser' / name, SITE / name)
     shutil.copy2(ROOT / 'assets' / 'app-icon.png', SITE / 'icon.png')
     header = (ROOT / 'docs' / 'AI_PROMPT_HEADER_RU.md').read_text(encoding='utf-8')
     rules = (ROOT / 'AI_JSON_RULES.md').read_text(encoding='utf-8')
