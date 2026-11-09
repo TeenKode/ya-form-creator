@@ -555,6 +555,6 @@ export function installEditor({ getConfig, commit, notice }) {
     el.id = id;
     actions.append(el);
   }
-  document.querySelector(".form-meta").append(actions);
+  document.getElementById("editorActions").append(actions);
   return { openQuestion, openSettings, openConditions, openLogic };
 }

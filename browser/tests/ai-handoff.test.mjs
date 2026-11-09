@@ -21,3 +21,12 @@ test('refuses incomplete, ambiguous or executable-looking input and keeps semant
   const c=parseConfigText('```json\n{"form":{"name":"X"},"questions":[{"type":"fio","slug":"q1","label":"Имя"}]}\n```');
   assert.throws(()=>dryRun(c));
 });
+
+import {buildAiPrompt} from '../../web/ai-prompt.mjs';
+test('prompt includes the exact brief after bounded rules, with no questionnaire or credentials',()=>{
+  const brief='Нужно 5 вопросов. Не собирай имена. Телефон — только по желанию.';
+  const prompt=buildAiPrompt(short,brief);
+  assert.ok(prompt.startsWith(short.trim()));assert.ok(prompt.includes('\n--- МОЁ ЗАДАНИЕ ---\n'+brief));
+  assert.equal(buildAiPrompt(short,'  '),short.trim()+'\n');
+  assert.throws(()=>buildAiPrompt('  ',brief));
+});
