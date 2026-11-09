@@ -13,7 +13,7 @@ const questionList=document.createElement('section');questionList.className='pan
 const openQuestion=index=>editor.openQuestion(index);
 function renderQuestionList(){questionList.hidden=!config.questions.length;questionList.replaceChildren(text('h2','Ваши вопросы'));config.questions.forEach((q,index)=>{const row=text('div','','question-row');row.append(text('span',`${index+1}. ${q.label}`));const controls=text('div','','question-controls');for(const [label,title,callback]of [
   ['✎','Изменить вопрос',()=>openQuestion(index)],
-  ['⧉','Дублировать вопрос',()=>{try{setConfig(duplicateQuestion(config,index));notice('Вопрос продублирован.');}catch(e){notice(e.message,true);}}],
+  ['Копия','Дублировать вопрос',()=>{try{setConfig(duplicateQuestion(config,index));notice('Вопрос продублирован.');}catch(e){notice(e.message,true);}}],
   ['↑','Поднять вопрос',()=>moveQuestion(index,-1)],['↓','Опустить вопрос',()=>moveQuestion(index,1)],
   ['×','Удалить вопрос',()=>{const count=relatedConditions(config,index).length;if(!confirm('Удалить вопрос «'+q.label+'»?'+(count?' Связанных условий будет удалено: '+count+'.':'')))return;try{setConfig(deleteQuestion(config,index));notice('Вопрос удалён.'+(count?' Удалено связанных условий: '+count+'.':''));}catch(e){notice(e.message,true);}}]
   ]){const b=text('button',label,'quiet');b.type='button';b.title=title;b.setAttribute('aria-label',title+' '+(index+1));b.addEventListener('click',callback);controls.append(b);}row.append(controls);questionList.append(row);});}
