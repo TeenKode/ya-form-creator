@@ -46,6 +46,7 @@ async function seed(page, config) {
   await page.locator("#jsonDetails").evaluate((el) => (el.open = true));
   await page.locator("#json").fill(JSON.stringify(config));
   await page.locator("#applyJson").click();
+  await page.locator("#manualEditor").evaluate(el => el.open = true);
 }
 const saved = (page) => page.locator("#json").inputValue().then(JSON.parse);
 async function saveQuestion(page) {

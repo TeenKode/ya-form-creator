@@ -1,16 +1,17 @@
+import {installAiFlow} from './ai-flow.mjs';
 import {installEditor} from './editor.mjs';
 import {duplicateQuestion,deleteQuestion,relatedConditions} from './editor-model.mjs';
 import {analyzeLogic} from './logic-analyzer.mjs';
 import {TYPES,FORMATS,validateConfig,resolveExclusive,expandQuestions,dryRun,visibleSlugs,optionLabel} from './core.mjs';
 import {parseConfigText} from './import-config.mjs';
 import {validInn} from './answer-validation.mjs';
-const SITE_VERSION='1.7.0';
+const SITE_VERSION='1.8.0';
 import {MIN_EXTENSION_VERSION,assessExtension} from './extension-version.mjs';
 const $=id=>document.getElementById(id),CHANNEL='yaform-bridge-v1';let connected=false,jobId=null,jobRunning=false,preparing=false,answers={},blocks=new Map(),effective;
 const fresh=()=>({form:{name:'Новая анкета',allow_multiple_answers:true,need_auth:false,publish_by_default:false},questions:[]});let config=fresh();
-let extension={state:'checking',compatible:false},detection;
-const questionList=document.createElement('section');questionList.className='panel question-list';questionList.setAttribute('aria-label','Редактирование вопросов');$('jsonDetails').before(questionList);
-const openQuestion=index=>editor.openQuestion(index);
+let extension={state:'checking',compatible:false},detection;let aiFlow;
+const questionList=document.createElement('section');questionList.className='panel question-list';questionList.setAttribute('aria-label','Редактирование вопросов');$('questionListMount').append(questionList);
+const openQuestion=index=>{$('manualEditor').open=true;editor.openQuestion(index);};
 function renderQuestionList(){questionList.hidden=!config.questions.length;questionList.replaceChildren(text('h2','Ваши вопросы'));config.questions.forEach((q,index)=>{const row=text('div','','question-row');row.append(text('span',`${index+1}. ${q.label}`));const controls=text('div','','question-controls');for(const [label,title,callback]of [
   ['✎','Изменить вопрос',()=>openQuestion(index)],
   ['Копия','Дублировать вопрос',()=>{try{setConfig(duplicateQuestion(config,index));notice('Вопрос продублирован.');}catch(e){notice(e.message,true);}}],
@@ -32,16 +33,22 @@ async function probeExtension(){
   $('connect').textContent=connected?'Настроить подключение →':outdated?'Обновить расширение →':extension.state==='site-outdated'?'Обновить страницу →':'Подключить Яндекс →';
   $('dot').classList.toggle('connected',connected);$('dot').classList.toggle('outdated',outdated||extension.state==='site-outdated');syncSend();return extension;
 }
-function syncSend(){$('send').disabled=!connected||!config.questions.length||jobRunning||preparing;$('send').setAttribute('aria-busy',String(preparing));const outdated=['outdated','unknown'].includes(extension.state);$('sendTitle').textContent=connected?'Всё готово к следующему шагу':outdated?'Обновите расширение':extension.state==='site-outdated'?'Обновите страницу сайта':'Следующий шаг — подключить Яндекс';$('sendNote').textContent=connected?'Проверьте анкету перед созданием.':outdated?'После обновления можно будет создать форму.':extension.state==='site-outdated'?'Для этого расширения нужна более новая версия сайта.':'Подключите Яндекс, чтобы создать форму.';}
+function syncSend(){
+  const ready=!!config.questions.length,outdated=['outdated','unknown'].includes(extension.state);
+  $('send').disabled=!connected||!ready||jobRunning||preparing;$('send').setAttribute('aria-busy',String(preparing));
+  $('sendTitle').textContent=!ready?'Подготовьте анкету, чтобы продолжить':connected?'Всё готово к созданию черновика':outdated?'Обновите расширение':extension.state==='site-outdated'?'Обновите страницу сайта':'Осталось подключить Яндекс';
+  $('sendNote').textContent=!ready?'Подключение к Яндексу понадобится на последнем шаге.':connected?'В расширении вы ещё раз проверите анкету и подтвердите создание.':outdated?'Установите совместимую версию расширения.':extension.state==='site-outdated'?'Для этого расширения нужна более новая версия сайта.':'Установите расширение на компьютере, войдите в Яндекс и выберите организацию.';
+  $('connectForSend').hidden=!ready||connected;
+}
 function showExtensionInstall(){const updating=['outdated','unknown'].includes(extension.state);$('installTitle').textContent=updating?'Обновите расширение':'Подключите расширение';$('installText').textContent=updating?'Замените файлы расширения новой версией и нажмите «Обновить» в управлении расширениями браузера.':'Установите расширение, чтобы создавать формы в Яндексе.';$('installSteps').hidden=updating;$('updateSteps').hidden=!updating;$('recheckExtension').hidden=!updating;$('extensionCheckStatus').textContent='';$('reloadExtensionPage').hidden=true;$('installDialog').showModal();}
 function persist(){try{localStorage.setItem('yaform:draft:v1',JSON.stringify(config));$('saveState').textContent='Сохранено в браузере';}catch{$('saveState').textContent='Только в памяти';}}
-function setConfig(data){validateConfig(data,{allowEmpty:true});if(data.questions.length)dryRun(data);config=structuredClone(data);answers={};persist();render();}
+function setConfig(data){validateConfig(data,{allowEmpty:true});if(data.questions.length)dryRun(data);if(data.questions.length&&!config.questions.length)$('manualEditor').open=true;config=structuredClone(data);answers={};persist();render();}
 function render(){$('formName').value=config.form.name;$('json').value=JSON.stringify(config,null,2);$('questionCount').textContent=config.questions.length;$('empty').hidden=!!config.questions.length;$('preview').hidden=!config.questions.length;$('blocks').replaceChildren();blocks=new Map();$('answerResult').textContent='';
   try{if(config.questions.length){effective=resolveExclusive(config);const expanded=expandQuestions(config);$('conditionCount').textContent=expanded.conditions.length;$('previewTitle').textContent=config.form.name;
       let number=0;for(const q of effective.questions){if(q.hidden)continue;if(['section','comment'].includes(q.type)){const block=document.createElement('section');block.className='question';const h=document.createElement(q.type==='section'?'h3':'p');h.textContent=q.label;block.append(h);$('blocks').append(block);continue;}
         addBlock(q,++number);if(q.other)addBlock({type:'text',slug:q.other.slug??q.slug+'_other',label:q.other.label??'Укажите свой вариант',required:q.other.required??true,multiline:q.other.multiline??false,placeholder:q.other.placeholder??'Введите свой вариант'},null);
       }updateVisibility();}else{$('conditionCount').textContent='0';}}
-  catch(e){notice(e.message,true);}renderQuestionList();syncSend();}
+  catch(e){notice(e.message,true);}renderQuestionList();syncSend();aiFlow?.sync();}
 function text(tag,value,className){const el=document.createElement(tag);el.textContent=value;if(className)el.className=className;return el;}
 function addBlock(q,number){const block=document.createElement('section');block.className='question';block.dataset.slug=q.slug;block.append(text('h3',`${number?number+'. ':''}${q.label}${q.required?' *':''}`));if(q.comment)block.append(text('p',q.comment));if(q.format&&q.format!=='plain')block.append(text('p',FORMATS[q.format]));
   function record(value){answers[q.slug]=value;updateVisibility();}
@@ -73,7 +80,7 @@ async function openFile(file){if(!file)return;if(file.size>750000){notice('Фа�
 $('file').addEventListener('change',e=>{openFile(e.target.files[0]);e.target.value='';});
 for(const name of ['dragover','dragleave','drop'])$('drop').addEventListener(name,e=>{e.preventDefault();$('drop').classList.toggle('drag',name==='dragover');if(name==='drop')openFile(e.dataTransfer.files[0]);});
 $('formName').addEventListener('change',()=>{const name=$('formName').value.trim();if(!name){notice('Введите название анкеты.',true);return; }config.form.name=name;persist();render();});
-$('new').addEventListener('click',()=>{if(config.questions.length&&!confirm('Начать новую анкету? Сначала сохраните текущую, если она нужна.'))return;jobId=null;setConfig(fresh());$('jobResult').hidden=true;notice('Новая анкета готова. Добавьте вопрос или откройте файл.');});
+$('new').addEventListener('click',()=>{if(config.questions.length&&!confirm('Начать новую анкету? Сначала сохраните текущую, если она нужна.'))return;jobId=null;setConfig(fresh());aiFlow?.reset();$('jobResult').hidden=true;notice('Начните с описания новой формы.');});
 $('save').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(config,null,2)+'\n'],{type:'application/json;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='form.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
 $('applyJson').addEventListener('click',()=>{try{setConfig(parseConfigText($('json').value));notice('Изменения сохранены.');}catch(e){notice(e.message,true);}});
 $('validate').addEventListener('click',()=>{try{dryRun(config);const issues=analyzeLogic(config);notice(issues.length?'Структура верна. Возможных логических проблем: '+issues.length+'. Откройте «Проверка логики».':'Проверка пройдена. Сверьте содержание анкеты с вашим заданием.');if(issues.length)editor.openLogic();}catch(e){notice(e.message,true);}});
@@ -83,19 +90,12 @@ $('connect').addEventListener('click',async()=>{if(extension.state==='site-outda
 $('reloadExtensionPage').addEventListener('click',()=>location.reload());
 $('recheckExtension').addEventListener('click',async()=>{$('recheckExtension').disabled=true;$('extensionCheckStatus').textContent='Проверяем расширение…';try{const result=await detect({fresh:true});if(result.compatible)$('installDialog').close();else{const reload=['missing','site-outdated'].includes(result.state);$('reloadExtensionPage').hidden=!reload;$('extensionCheckStatus').textContent=reload?'Обновите страницу сайта, чтобы подключить обновлённое расширение.':'Обновление пока не обнаружено. Обновите расширение и повторите проверку.';}}finally{$('recheckExtension').disabled=false;}});
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>$(b.dataset.close).close()));
-let aiPack;
-async function loadAi(){if(aiPack)return aiPack;const response=await fetch('ai-instructions.txt');if(!response.ok)throw new Error('Не удалось загрузить правила. Обновите страницу или скачайте TXT-файл.');aiPack=(await response.text()).replaceAll('\r\n','\n');$('aiText').value=aiPack;return aiPack;}
-async function openAi(){$('aiDialog').showModal();$('copyAi').disabled=true;try{await loadAi();$('copyAi').disabled=false;$('aiStatus').textContent='';}catch(e){$('aiStatus').textContent=e.message;}}
-function openJsonInput(){if($('aiDialog').open)$('aiDialog').close();$('jsonDetails').open=true;$('json').focus();$('json').select();$('jsonDetails').scrollIntoView({behavior:'smooth',block:'center'});}
-$('pasteAi').addEventListener('click',openJsonInput);$('pasteAiInline').addEventListener('click',openJsonInput);
-$('ai').addEventListener('click',openAi);
-const aiInline=text('button','Подготовить анкету с ИИ','quiet');aiInline.type='button';aiInline.id='aiInline';aiInline.addEventListener('click',openAi);$('drop').append(aiInline);
-$('copyAi').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(await loadAi());$('aiStatus').textContent='Скопировано. Теперь вставьте в чат и добавьте своё задание.';}catch{$('aiFallback').open=true;$('aiText').focus();$('aiText').select();$('aiStatus').textContent='Нажмите Ctrl+C, чтобы скопировать выделенный текст.';}});
-$('selectAi').addEventListener('click',()=>{$('aiText').focus();$('aiText').select();});
-$('aiFallback').addEventListener('toggle',()=>{if($('aiFallback').open)loadAi().catch(e=>$('aiStatus').textContent=e.message);});
 $('send').addEventListener('click',async()=>{if(preparing)return;preparing=true;syncSend();try{const result=await detect({fresh:true});if(!result.compatible){notice(result.state==='site-outdated'?'Обновите страницу сайта перед созданием формы.':'Обновите или подключите расширение перед созданием формы.',true);return;}dryRun(config);const issues=analyzeLogic(config);if(issues.length&&!confirm('Найдены возможные логические проблемы: '+issues.length+'. Продолжить создание без исправлений?')){editor.openLogic();return;}const job=await bridge('prepare',{config},15000);jobId=job.id;notice('Подтвердите создание формы в открывшейся вкладке.');}catch(e){notice(e.message,true);}finally{preparing=false;syncSend();}});
 setInterval(async()=>{if(!jobId)return;try{const job=await bridge('status',{jobId});jobRunning=job.status==='running';syncSend();if(job.status==='running')notice(`Создание в Яндексе: ${job.done??0} из ${job.total??'…'} элементов.`);if(['success','error','interrupted'].includes(job.status)){const box=$('jobResult');box.hidden=false;box.replaceChildren(text('h2',job.status==='success'?(job.result.published?'Форма опубликована':'Черновик создан'):'Создание остановлено'));box.append(text('p',job.error??'Откройте форму в Яндексе и проверьте её.'));if(job.result){for(const [label,key]of [['Редактировать форму','edit_url'],['Ссылка для заполнения','fill_url']]){const a=text('a',label+' ↗');a.href=job.result[key];a.target='_blank';a.rel='noreferrer';box.append(a);}}jobId=null;}}catch(e){notice(e.message,true);jobId=null;jobRunning=false;syncSend();}},1700);
 $('version').textContent=SITE_VERSION;
 const editor=installEditor({getConfig:()=>config,commit:setConfig,notice});
+aiFlow=installAiFlow({getConfig:()=>config,commit:setConfig,parseConfigText,dryRun,notice});
+$('connectForSend').addEventListener('click',()=>$('connect').click());
+$('reviewHeading').tabIndex=-1;
 document.addEventListener('keydown',e=>{if(document.querySelector('dialog[open]'))return;const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName);if(e.key==='F6'){e.preventDefault();editor.openLogic();}else if(e.key==='F5'){e.preventDefault();$('preview').scrollIntoView({behavior:'smooth'});}else if((e.ctrlKey||e.metaKey)&&!e.altKey){const id={n:'new',o:'file',s:'save'}[e.key.toLowerCase()];if(id){e.preventDefault();$(id).click();}}else if(!typing&&e.key==='Delete'){const row=document.activeElement?.closest('.question-row');row?.querySelector('button[title="Удалить вопрос"]')?.click();}});
 try{const draft=localStorage.getItem('yaform:draft:v1');if(draft){const data=JSON.parse(draft);validateConfig(data,{allowEmpty:true});if(data.questions.length)dryRun(data);config=data;}}catch{notice('Локальная копия не восстановлена. Откройте сохранённый JSON.',true);}render();detect();setTimeout(detect,2500);window.addEventListener('focus',detect);

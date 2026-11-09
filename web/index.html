@@ -1,10 +1,514 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f5f5ef"><meta name="description" content="Создавайте Яндекс Формы: подготовьте вопросы, проверьте предпросмотр и сохраните форму в Яндексе."><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"><title>YaFormCreator — из анкеты в Яндекс Форму</title><link rel="icon" href="icon.png"><link rel="stylesheet" href="style.css"></head><body>
-<aside class="sidebar"><a class="brand" href="./"><img src="icon.png" alt="" width="42" height="42"><span>YaForm<span>Creator</span></span></a><p class="side-caption">ВАШИ ВОПРОСЫ. ПОНЯТНЫЕ ФОРМЫ.</p><nav aria-label="Разделы"><a class="nav active" href="#workspace"><span>▤</span> Моя анкета</a><button class="nav" id="help"><span>?</span> Как это работает</button><button class="nav" id="ai"><span>✧</span> Создать с ИИ</button></nav><div class="side-bottom"><div class="extension-state"><span class="status-dot" id="dot"></span><strong id="extensionState">Проверяем расширение…</strong><p id="extensionNote">Анкета остаётся на этом устройстве.</p><button id="connect" class="side-action">Подключить расширение →</button></div><span class="site-version" aria-label="Версия сайта">Версия сайта <span id="version"></span></span></div></aside>
-<main id="workspace"><header class="topbar"><span><span class="online-dot"></span> Моя анкета</span><button id="new" class="quiet">Новая анкета</button></header><section class="heading"><div><p class="eyebrow">КОНСТРУКТОР ЯНДЕКС ФОРМ</p><h1>От вопросов — к готовой форме<span>.</span></h1><p class="subtitle">Откройте анкету, проверьте её и создайте черновик в Яндексе.</p></div><button id="save" class="secondary">↓ Сохранить анкету</button></section>
-<ol class="steps" aria-label="Порядок работы"><li class="current"><span>01</span><div><strong>Ваша анкета</strong><small>Добавьте вопросы</small></div></li><li><span>02</span><div><strong>Проверка</strong><small>Попробуйте заполнить</small></div></li><li><span>03</span><div><strong>Создание</strong><small>Сохраните в Яндексе</small></div></li></ol>
-<section class="workspace-grid"><div class="source-panel"><section class="panel upload" id="drop"><div class="file-icon">↥</div><h2>Начните с вашей анкеты</h2><p>Откройте файл, вставьте ответ ИИ или добавьте вопросы вручную.</p><label class="button primary" for="file">Открыть анкету</label><input id="file" type="file" accept=".json,.txt,application/json,text/plain" hidden><button id="pasteAiInline" class="secondary" type="button">Вставить ответ ИИ</button></section><section class="panel form-meta"><div class="section-head"><h2>Настройки анкеты</h2><span class="badge" id="saveState">Новая анкета</span></div><label for="formName">Название</label><input id="formName" value="Новая анкета" maxlength="500"><div class="summary"><span><b id="questionCount">0</b> вопросов и блоков</span><span><b id="conditionCount">0</b> условий</span></div><div class="row"><button id="add" class="secondary">+ Добавить вопрос</button><button id="validate" class="quiet">Проверить</button></div></section><details class="panel json-panel" id="jsonDetails"><summary>Редактировать JSON вручную</summary><p>Вставьте сюда текст ответа ИИ и нажмите «Применить изменения». Оформление блока кода можно оставить.</p><label class="sr-only" for="json">JSON анкеты</label><textarea id="json" spellcheck="false" rows="12"></textarea><button id="applyJson" class="secondary">Применить изменения</button></details><div id="notice" role="status" aria-live="polite"></div></div>
-<section class="panel preview-panel"><div class="preview-toolbar"><div><span class="eyebrow">ПРЕДПРОСМОТР</span><h2>Так увидит участник</h2></div><button id="clearAnswers" class="quiet">Сбросить ответы</button></div><div class="preview-surface"><div id="empty" class="empty"><div class="empty-sheet"><span></span><i></i><i></i><b>✓</b></div><h3>Здесь появится ваша форма</h3><p>Добавьте первый вопрос или подготовьте анкету с ИИ.</p><button id="emptyAdd" class="quiet">+ Добавить первый вопрос</button></div><form id="preview" novalidate hidden><h2 id="previewTitle"></h2><div id="blocks"></div><button class="secondary" type="submit">Проверить ответы</button><div id="answerResult" role="status" aria-live="polite"></div></form></div><footer class="preview-foot"><span class="lock">⌑</span> Ответы предпросмотра не отправляются.</footer></section></section>
-<section class="send-bar"><div><strong id="sendTitle">Следующий шаг — подключить Яндекс</strong><p id="sendNote">Подключите Яндекс, чтобы создать форму.</p></div><button id="send" class="primary" disabled>Создать в Яндексе <span>→</span></button></section><section id="jobResult" class="panel result-panel" hidden aria-live="polite"></section><footer class="page-footer">YaFormCreator — независимый инструмент для работы с Яндекс Формами.<a href="help.html">Справка</a><a href="privacy.html">Конфиденциальность</a></footer></main>
-<dialog id="installDialog"><button class="dialog-close quiet" data-close="installDialog" aria-label="Закрыть">×</button><p class="eyebrow">ПОДКЛЮЧЕНИЕ К ЯНДЕКСУ</p><h2 id="installTitle">Подключите расширение</h2><p id="installText">Установите расширение, чтобы создавать формы в Яндексе.</p><ol class="install-steps" id="installSteps"><li>Скачайте и распакуйте ZIP расширения.</li><li>Откройте управление расширениями браузера: <code>chrome://extensions</code>, <code>browser://extensions</code> или <code>edge://extensions</code>.</li><li>Включите режим разработчика → «Загрузить распакованное» → выберите папку с manifest.json.</li><li>Обновите эту страницу. В настройках расширения войдите в Яндекс и выберите свою организацию.</li></ol><ol class="install-steps" id="updateSteps" hidden><li>Скачайте и распакуйте ZIP, заменив файлы в папке установленного расширения.</li><li>Откройте управление расширениями браузера и нажмите «Обновить» у YaFormCreator.</li><li>Обновите страницу сайта, чтобы подключить новую версию расширения.</li></ol><div class="row"><a class="button primary" href="yaform-extension.zip" download>↓ Скачать расширение</a><button id="recheckExtension" class="secondary" hidden>Проверить обновление</button><button id="reloadExtensionPage" class="secondary" hidden>Обновить страницу сайта</button></div><p id="extensionCheckStatus" role="status" aria-live="polite"></p><p class="tiny">Chrome, Яндекс Браузер и Edge на компьютере. В мобильных браузерах расширение может быть недоступно. Расширение пока устанавливается из ZIP.</p></dialog>
-<dialog id="helpDialog"><button class="dialog-close quiet" data-close="helpDialog" aria-label="Закрыть">×</button><h2>Три шага к готовой форме</h2><ol class="install-steps"><li>Откройте анкету или добавьте вопросы вручную.</li><li>Проверьте вопросы и попробуйте ответить.</li><li>Подключите Яндекс и подтвердите создание формы.</li></ol><a class="button primary" href="help.html">Открыть справку</a></dialog>
-<dialog id="questionDialog"><button class="dialog-close quiet" data-close="questionDialog" aria-label="Закрыть">×</button><h2>Новый вопрос</h2><form id="questionForm"><label>Текст вопроса<input id="qLabel" required maxlength="8000" placeholder="Например, как с вами связаться?"></label><label>Тип ответа<select id="qType"><option value="text">Текст</option><option value="radio">Один вариант</option><option value="checkbox">Несколько вариантов</option><option value="dropdown">Выпадающий список</option><option value="integer">Целое число</option><option value="date">Дата</option><option value="boolean">Да / нет</option><option value="section">Раздел</option><option value="comment">Текстовый блок</option></select></label><label id="formatLabel">Назначение поля<select id="qFormat"><option value="plain">Обычный текст</option><option value="full_name">ФИО / имя</option><option value="phone">Телефон РФ</option><option value="email">Электронная почта</option><option value="url">Ссылка</option><option value="inn">ИНН</option><option value="decimal">Дробное число</option></select></label><label id="optionsLabel" hidden>Варианты ответа, каждый с новой строки<textarea id="qOptions" rows="5"></textarea></label><div id="choiceLimits" hidden><label>Минимум выбранных ответов<input id="qMinChoices" type="number" min="0" step="1" placeholder="Без ограничения" disabled></label><label>Максимум выбранных ответов<input id="qMaxChoices" type="number" min="0" step="1" placeholder="Без ограничения" disabled></label></div><p id="questionError" role="alert"></p><label class="check"><input type="checkbox" id="qRequired"> Обязательный ответ</label><button type="submit" class="primary">Добавить в анкету</button></form></dialog><dialog id="aiDialog"><button class="dialog-close quiet" data-close="aiDialog" aria-label="Закрыть">×</button><h2>Попросите ИИ составить анкету</h2><p>Скопируйте короткое задание в свой чат с ИИ и добавьте описание анкеты.</p><div class="row"><button id="copyAi" class="primary">Скопировать задание</button><a class="button secondary" href="ai-instructions.txt" download>Скачать TXT</a></div><p id="aiStatus" role="status" aria-live="polite"></p><details id="aiFallback"><summary>Показать текст для ручного копирования</summary><label for="aiText">Короткое задание для ИИ</label><textarea id="aiText" readonly rows="9" spellcheck="false"></textarea><button id="selectAi" class="secondary">Выделить весь текст</button></details><ol class="install-steps"><li>Вставьте задание в чат и опишите нужную анкету.</li><li>Скопируйте JSON из ответа ИИ. Прикреплённый файл не нужен.</li><li>Нажмите «Вставить ответ ИИ», вставьте текст в поле JSON и примените изменения. Затем сверьте вопросы.</li></ol><button id="pasteAi" type="button" class="primary">Вставить ответ ИИ →</button><details><summary>Для сложных анкет</summary><p>Если нужны необычные настройки или тест с правильными ответами, дополнительно прикрепите <a href="ai-reference.txt" download>подробный справочник</a>.</p></details></dialog><script src="app.mjs" type="module"></script></body></html>
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#f6f7f2" />
+    <meta
+      name="description"
+      content="Создайте Яндекс Форму с помощью ИИ: опишите задачу, получите готовый запрос, вставьте ответ и проверьте форму перед созданием."
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>YaFormCreator — создайте Яндекс Форму с ИИ</title>
+    <link rel="icon" href="icon.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#aiBrief">Перейти к созданию формы</a>
+    <header class="site-header">
+      <a class="brand" href="./"
+        ><img src="icon.png" alt="" width="40" height="40" /><span
+          >YaForm<span>Creator</span></span
+        ></a
+      >
+      <nav aria-label="Помощь">
+        <button id="help" class="quiet">Как это работает</button
+        ><button id="ai" class="quiet">Инструкция для ИИ</button>
+      </nav>
+      <div class="connection">
+        <span class="connection-label"
+          ><span class="status-dot" id="dot"></span
+          ><strong id="extensionState">Проверяем расширение…</strong></span
+        ><button id="connect" class="secondary">Подключить Яндекс</button>
+        <p id="extensionNote" class="sr-only"></p>
+      </div>
+    </header>
+    <main id="workspace">
+      <section class="hero" aria-labelledby="heroTitle">
+        <p class="eyebrow">КОНСТРУКТОР ЯНДЕКС ФОРМ</p>
+        <h1 id="heroTitle">Ваша идея.<br />Готовая форма <span>с ИИ.</span></h1>
+        <p class="hero-description">
+          Опишите, что хотите узнать. Подготовьте анкету в своём чате с ИИ,<br
+            class="desktop-break"
+          />
+          а здесь проверьте её и создайте в Яндексе.
+        </p>
+      </section>
+      <ol class="journey" aria-label="Порядок работы">
+        <li id="stepPrompt" aria-current="step">
+          <span>1</span>
+          <div>
+            <strong>Опишите форму</strong
+            ><small>Скопируйте запрос для ИИ</small>
+          </div>
+        </li>
+        <li id="stepImport">
+          <span>2</span>
+          <div>
+            <strong>Верните ответ ИИ</strong><small>Сайт соберёт вопросы</small>
+          </div>
+        </li>
+        <li id="stepReview">
+          <span>3</span>
+          <div>
+            <strong>Проверьте и создайте</strong
+            ><small>Черновик в Яндекс Формах</small>
+          </div>
+        </li>
+      </ol>
+      <section class="ai-workspace" aria-label="Создание формы с ИИ">
+        <section class="composer panel">
+          <div class="card-heading">
+            <span class="step-label">ШАГ 1</span
+            ><span class="local-note" id="briefSaveState"
+              >Описание сохраняется в этом браузере</span
+            >
+          </div>
+          <h2>Какая форма вам нужна?</h2>
+          <p>Для кого она, о чём спросить и какие ответы собрать.</p>
+          <label class="sr-only" for="aiBrief">Описание формы для ИИ</label
+          ><textarea
+            id="aiBrief"
+            rows="5"
+            maxlength="20000"
+            placeholder="Например: анкета для родителей об организации школьного питания. Оценка завтрака и обеда от 1 до 5, что нравится и что хотелось бы улучшить. Без сбора имён."
+          ></textarea>
+          <div id="briefError" role="alert"></div>
+          <div class="composer-actions">
+            <button id="copyPrompt" class="primary">
+              Скопировать запрос для ИИ
+              <span aria-hidden="true">→</span></button
+            ><button id="aiInline" class="quiet">
+              Только инструкция для ИИ
+            </button>
+          </div>
+          <p class="composer-note">
+            В запрос войдут ваше описание и правила для готовой формы.
+          </p>
+          <section
+            id="promptNext"
+            class="next-action"
+            hidden
+            aria-live="polite"
+          >
+            <strong>Запрос готов. Продолжите в своём чате с ИИ.</strong>
+            <p>
+              Вставьте скопированный запрос в чат, дождитесь ответа и вернитесь
+              сюда.
+            </p>
+            <div class="row">
+              <a
+                class="button secondary"
+                href="https://chatgpt.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                >Открыть ChatGPT ↗</a
+              ><button id="pasteAfterPrompt" class="quiet">
+                Ответ уже получен →
+              </button>
+            </div>
+          </section>
+        </section>
+        <div class="handoff-column">
+          <section class="panel import-card" id="drop">
+            <span class="step-label">ШАГ 2</span>
+            <h2>Получили ответ ИИ?</h2>
+            <p>
+              Скопируйте его из чата и вставьте сюда. Сайт проверит структуру и
+              покажет вопросы.
+            </p>
+            <button id="pasteAiInline" class="secondary">
+              Вставить ответ ИИ <span aria-hidden="true">→</span>
+            </button>
+            <div class="import-alternative">
+              <span>или</span
+              ><label for="file" class="file-link">откройте файл анкеты</label
+              ><input
+                id="file"
+                type="file"
+                accept=".json,.txt,application/json,text/plain"
+                hidden
+              />
+            </div>
+            <p class="tiny">
+              Поддерживаются JSON, TXT и ответ с оформлением блока кода. Файл
+              можно перетащить сюда.
+            </p>
+          </section>
+          <aside class="workflow-note">
+            <span class="note-mark" aria-hidden="true">✓</span>
+            <div>
+              <strong>Сначала вопросы. Затем подключение.</strong>
+              <p>
+                Подготовить и проверить анкету можно сразу. Расширение и вход в
+                Яндекс понадобятся при создании черновика на компьютере.
+              </p>
+            </div>
+          </aside>
+        </div>
+      </section>
+      <div id="notice" role="status" aria-live="polite"></div>
+      <section class="review-section" aria-labelledby="reviewHeading">
+        <header class="review-heading">
+          <div>
+            <span class="step-label">ШАГ 3</span>
+            <h2 id="reviewHeading">Проверьте будущую форму</h2>
+            <p id="reviewHint">
+              Здесь появится анкета, когда вы вставите ответ ИИ.
+            </p>
+          </div>
+          <div class="review-actions">
+            <button id="save" class="secondary">Сохранить анкету</button
+            ><button id="new" class="quiet">Начать заново</button>
+          </div>
+        </header>
+        <div class="workspace-grid">
+          <section class="panel preview-panel">
+            <div class="preview-toolbar">
+              <div>
+                <span class="eyebrow">ПРЕДПРОСМОТР</span>
+                <h3>Так увидит участник</h3>
+              </div>
+              <button id="clearAnswers" class="quiet">Сбросить ответы</button>
+            </div>
+            <div class="preview-surface">
+              <div id="empty" class="empty">
+                <div class="empty-symbol" aria-hidden="true">
+                  <span></span><span></span><span></span>
+                </div>
+                <h3>Пока здесь чистый лист</h3>
+                <p>
+                  Начните с описания формы выше<br />или создайте вопросы
+                  самостоятельно.
+                </p>
+                <button id="emptyAdd" class="quiet">
+                  Добавить вопросы вручную
+                </button>
+              </div>
+              <form id="preview" novalidate hidden>
+                <h2 id="previewTitle"></h2>
+                <div id="blocks"></div>
+                <button class="secondary" type="submit">
+                  Проверить ответы
+                </button>
+                <div id="answerResult" role="status" aria-live="polite"></div>
+              </form>
+            </div>
+            <footer class="preview-foot">
+              Это локальный предпросмотр. Введённые ответы никуда не
+              отправляются.
+            </footer>
+          </section>
+          <aside class="source-panel">
+            <section class="panel form-meta">
+              <div class="section-head">
+                <h3>Ваша анкета</h3>
+                <span class="badge" id="saveState">Новая анкета</span>
+              </div>
+              <label for="formName">Название формы</label
+              ><input id="formName" value="Новая анкета" maxlength="500" />
+              <div class="summary">
+                <span><b id="questionCount">0</b> вопросов и блоков</span
+                ><span><b id="conditionCount">0</b> условий</span>
+              </div>
+              <div class="row">
+                <button id="validate" class="secondary">Проверить анкету</button
+                ><button id="add" class="quiet">+ Вопрос</button>
+              </div>
+            </section>
+            <details id="manualEditor" class="panel manual-editor">
+              <summary>Редактировать вопросы и настройки</summary>
+              <p class="tiny">
+                Измените формулировки, порядок вопросов и условия показа.
+              </p>
+              <div id="editorActions"></div>
+              <div id="questionListMount"></div>
+            </details>
+            <details class="panel json-panel" id="jsonDetails">
+              <summary>Дополнительно: JSON анкеты</summary>
+              <p>
+                Для ручной настройки. Ответ ИИ удобнее вставить кнопкой на шаге
+                2.
+              </p>
+              <label class="sr-only" for="json">JSON анкеты</label
+              ><textarea id="json" spellcheck="false" rows="12"></textarea
+              ><button id="applyJson" class="secondary">
+                Применить изменения
+              </button>
+            </details>
+          </aside>
+        </div>
+        <section class="send-bar">
+          <div>
+            <strong id="sendTitle">Подготовьте анкету, чтобы продолжить</strong>
+            <p id="sendNote">
+              Подключение к Яндексу понадобится на последнем шаге.
+            </p>
+            <button id="connectForSend" class="text-button" hidden>
+              Подключить Яндекс
+            </button>
+          </div>
+          <button id="send" class="primary" disabled>
+            Создать в Яндексе <span aria-hidden="true">→</span>
+          </button>
+        </section>
+        <section
+          id="jobResult"
+          class="panel result-panel"
+          hidden
+          aria-live="polite"
+        ></section>
+      </section>
+      <footer class="page-footer">
+        <div>
+          <strong>YaFormCreator</strong
+          ><span>Независимый инструмент для Яндекс Форм</span>
+        </div>
+        <nav aria-label="О сайте">
+          <a href="help.html">Справка</a
+          ><a href="privacy.html">Конфиденциальность</a
+          ><span class="site-version">Версия <span id="version"></span></span>
+        </nav>
+      </footer>
+    </main>
+    <dialog id="importDialog">
+      <button
+        class="dialog-close quiet"
+        data-close="importDialog"
+        aria-label="Закрыть"
+      >
+        ×</button
+      ><span class="step-label">ОТВЕТ ИИ</span>
+      <h2>Вставьте ответ из чата</h2>
+      <p>
+        Можно вставить весь ответ с анкетой. Убирать оформление блока кода не
+        нужно.
+      </p>
+      <form id="importForm">
+        <label for="importText">Ответ ИИ с готовой анкетой</label
+        ><textarea
+          id="importText"
+          rows="10"
+          spellcheck="false"
+          placeholder="Вставьте сюда скопированный ответ ИИ…"
+          required
+        ></textarea>
+        <p id="importError" role="alert"></p>
+        <button id="importAnswer" class="primary" type="submit">
+          Показать форму <span aria-hidden="true">→</span>
+        </button>
+      </form>
+      <p class="tiny">
+        Проверка выполняется на устройстве. Анкета не отправляется ИИ
+        автоматически.
+      </p>
+    </dialog>
+    <dialog id="installDialog">
+      <button
+        class="dialog-close quiet"
+        data-close="installDialog"
+        aria-label="Закрыть"
+      >
+        ×
+      </button>
+      <p class="eyebrow">ПОДКЛЮЧЕНИЕ К ЯНДЕКСУ</p>
+      <h2 id="installTitle">Подключите расширение</h2>
+      <p id="installText">
+        Установите расширение, чтобы создавать формы в Яндексе.
+      </p>
+      <ol class="install-steps" id="installSteps">
+        <li>Скачайте и распакуйте ZIP расширения.</li>
+        <li>
+          Откройте управление расширениями браузера:
+          <code>chrome://extensions</code>,
+          <code>browser://extensions</code> или <code>edge://extensions</code>.
+        </li>
+        <li>
+          Включите режим разработчика → «Загрузить распакованное» → выберите
+          папку с manifest.json.
+        </li>
+        <li>
+          Обновите эту страницу. В настройках расширения войдите в Яндекс и
+          выберите свою организацию.
+        </li>
+      </ol>
+      <ol class="install-steps" id="updateSteps" hidden>
+        <li>
+          Скачайте и распакуйте ZIP, заменив файлы в папке установленного
+          расширения.
+        </li>
+        <li>
+          Откройте управление расширениями браузера и нажмите «Обновить» у
+          YaFormCreator.
+        </li>
+        <li>
+          Обновите страницу сайта, чтобы подключить новую версию расширения.
+        </li>
+      </ol>
+      <div class="row">
+        <a class="button primary" href="yaform-extension.zip" download
+          >↓ Скачать расширение</a
+        ><button id="recheckExtension" class="secondary" hidden>
+          Проверить обновление</button
+        ><button id="reloadExtensionPage" class="secondary" hidden>
+          Обновить страницу сайта
+        </button>
+      </div>
+      <p id="extensionCheckStatus" role="status" aria-live="polite"></p>
+      <p class="tiny">
+        Chrome, Яндекс Браузер и Edge на компьютере. В мобильных браузерах
+        расширение может быть недоступно. Расширение пока устанавливается из
+        ZIP.
+      </p>
+    </dialog>
+    <dialog id="helpDialog">
+      <button
+        class="dialog-close quiet"
+        data-close="helpDialog"
+        aria-label="Закрыть"
+      >
+        ×
+      </button>
+      <h2>Три шага к готовой форме</h2>
+      <ol class="install-steps">
+        <li>Опишите форму и скопируйте готовый запрос в свой чат с ИИ.</li>
+        <li>Верните ответ ИИ сюда кнопкой «Вставить ответ ИИ».</li>
+        <li>
+          Проверьте вопросы, подключите Яндекс и подтвердите создание черновика.
+        </li>
+      </ol>
+      <a class="button primary" href="help.html">Открыть справку</a>
+    </dialog>
+    <dialog id="questionDialog">
+      <button
+        class="dialog-close quiet"
+        data-close="questionDialog"
+        aria-label="Закрыть"
+      >
+        ×
+      </button>
+      <h2>Новый вопрос</h2>
+      <form id="questionForm">
+        <label
+          >Текст вопроса<input
+            id="qLabel"
+            required
+            maxlength="8000"
+            placeholder="Например, как с вами связаться?" /></label
+        ><label
+          >Тип ответа<select id="qType">
+            <option value="text">Текст</option>
+            <option value="radio">Один вариант</option>
+            <option value="checkbox">Несколько вариантов</option>
+            <option value="dropdown">Выпадающий список</option>
+            <option value="integer">Целое число</option>
+            <option value="date">Дата</option>
+            <option value="boolean">Да / нет</option>
+            <option value="section">Раздел</option>
+            <option value="comment">Текстовый блок</option>
+          </select></label
+        ><label id="formatLabel"
+          >Назначение поля<select id="qFormat">
+            <option value="plain">Обычный текст</option>
+            <option value="full_name">ФИО / имя</option>
+            <option value="phone">Телефон РФ</option>
+            <option value="email">Электронная почта</option>
+            <option value="url">Ссылка</option>
+            <option value="inn">ИНН</option>
+            <option value="decimal">Дробное число</option>
+          </select></label
+        ><label id="optionsLabel" hidden
+          >Варианты ответа, каждый с новой строки<textarea
+            id="qOptions"
+            rows="5"
+          ></textarea>
+        </label>
+        <div id="choiceLimits" hidden>
+          <label
+            >Минимум выбранных ответов<input
+              id="qMinChoices"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="Без ограничения"
+              disabled /></label
+          ><label
+            >Максимум выбранных ответов<input
+              id="qMaxChoices"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="Без ограничения"
+              disabled
+          /></label>
+        </div>
+        <p id="questionError" role="alert"></p>
+        <label class="check"
+          ><input type="checkbox" id="qRequired" /> Обязательный ответ</label
+        ><button type="submit" class="primary">Добавить в анкету</button>
+      </form>
+    </dialog>
+    <dialog id="aiDialog">
+      <button
+        class="dialog-close quiet"
+        data-close="aiDialog"
+        aria-label="Закрыть"
+      >
+        ×
+      </button>
+      <h2>Попросите ИИ составить анкету</h2>
+      <p>
+        Скопируйте инструкцию вместе с вашим описанием и отправьте в ChatGPT или
+        другой чат с ИИ. Ответ верните на этот сайт.
+      </p>
+      <div class="row">
+        <button id="copyAi" class="primary">Скопировать задание</button
+        ><a class="button secondary" href="ai-instructions.txt" download
+          >Скачать TXT</a
+        >
+      </div>
+      <p id="aiStatus" role="status" aria-live="polite"></p>
+      <details id="aiFallback">
+        <summary>Показать текст для ручного копирования</summary>
+        <label for="aiText">Короткое задание для ИИ</label
+        ><textarea id="aiText" readonly rows="9" spellcheck="false"></textarea
+        ><button id="selectAi" class="secondary">Выделить весь текст</button>
+      </details>
+      <ol class="install-steps">
+        <li>Вставьте задание в чат и опишите нужную анкету.</li>
+        <li>
+          Скопируйте весь ответ ИИ с анкетой. Прикреплённый файл не нужен.
+        </li>
+        <li>
+          Нажмите «Вставить ответ ИИ». Сайт проверит ответ и покажет форму для
+          проверки.
+        </li>
+      </ol>
+      <button id="pasteAi" type="button" class="primary">
+        Вставить ответ ИИ →
+      </button>
+      <details>
+        <summary>Для сложных анкет</summary>
+        <p>
+          Если нужны необычные настройки или тест с правильными ответами,
+          дополнительно прикрепите
+          <a href="ai-reference.txt" download>подробный справочник</a>.
+        </p>
+      </details>
+    </dialog>
+    <script src="app.mjs" type="module"></script>
+  </body>
+</html>
