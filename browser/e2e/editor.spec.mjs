@@ -214,7 +214,7 @@ test("visual conditions: add, edit, rename, duplicate, remove references and dis
     await expect(
       page.getByRole("textbox", { name: "Follow", exact: true }),
     ).toBeHidden();
-    await page.getByLabel("A", { exact: true }).check();
+    await page.locator("#blocks").getByLabel("A", { exact: true }).check();
     await expect(
       page.getByRole("textbox", { name: "Follow", exact: true }),
     ).toBeVisible();
@@ -272,6 +272,7 @@ test("visual conditions: add, edit, rename, duplicate, remove references and dis
     q.placeholder = "Advanced";
     await page.locator("#questionJson").fill(JSON.stringify(q));
     await page.locator("#applyQuestionJson").click();
+    await expect(page.locator("#questionDialog")).toBeHidden();
     expect((await saved(page)).questions[0].placeholder).toBe("Advanced");
   }));
 

@@ -151,6 +151,8 @@ export function installEditor({ getConfig, commit, notice }) {
     if (type === "checkbox") {
       numeric(q, "min_choices", "qMinChoices");
       numeric(q, "max_choices", "qMaxChoices");
+      if ((q.min_choices ?? 0) > (q.max_choices ?? Infinity))
+        throw new Error("Минимум ответов не может быть больше максимума.");
       if ($("qExclusiveAuto").checked) delete q.exclusive_options;
       else q.exclusive_options = lines($("qExclusive").value);
     }
@@ -264,14 +266,16 @@ export function installEditor({ getConfig, commit, notice }) {
       $("questionError").textContent = e.message;
     }
   });
-  $("questionJsonDetails").addEventListener("toggle", () => {
-    if ($("questionJsonDetails").open)
-      try {
-        put("questionJson", JSON.stringify(collect(), null, 2));
-      } catch (e) {
-        $("questionError").textContent = e.message;
-      }
-  });
+  $("questionJsonDetails")
+    .querySelector("summary")
+    .addEventListener("click", () => {
+      if (!$("questionJsonDetails").open)
+        try {
+          put("questionJson", JSON.stringify(collect(), null, 2));
+        } catch (e) {
+          $("questionError").textContent = e.message;
+        }
+    });
   $("applyQuestionJson").addEventListener("click", () => {
     try {
       saveQuestion(JSON.parse($("questionJson").value));
